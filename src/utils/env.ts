@@ -25,7 +25,7 @@ export function getEnv(name: string, defaultValue: string = ''): string {
 }
 
 export function getApiUrl(): string {
-  return getEnv('IMARA_API_URL', 'https://api.imara.ai').trim();
+  return getEnv('IMARA_API_URL', 'https://api.imara.consolidis.com').trim();
 }
 
 export function getDebugMode(): boolean {

@@ -15,7 +15,7 @@
 Pour installer Imara globalement sur votre système :
 
 ```bash
-npm install -g imara-cli
+npm install -g @consolidis/imara-cli
 ```
 
 ## 🚀 Démarrage Rapide
