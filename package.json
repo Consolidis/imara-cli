@@ -1,0 +1,60 @@
+{
+  "name": "imara-cli",
+  "version": "1.0.0",
+  "description": "Agent de codage IA pour le terminal — propulsé par Imara AI",
+  "main": "dist/index.js",
+  "bin": {
+    "imara": "./dist/index.js"
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "cli",
+    "ai",
+    "coding-assistant",
+    "imara"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Consolidis/imara-cli.git"
+  }, 
+  "bugs": { 
+    "url": "https://github.com/Consolidis/imara-cli/issues"
+  },
+  "homepage": "https://imara.consolidis.com/chat",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^14.0.3",
+    "diff": "^9.0.0",
+    "dotenv": "^17.4.2",
+    "enquirer": "^2.4.1",
+    "fast-glob": "^3.3.3",
+    "keytar": "^7.9.0",
+    "ora": "^5.4.1",
+    "update-notifier": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/diff": "^7.0.2",
+    "@types/node": "^25.8.0",
+    "@types/update-notifier": "^6.0.8",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6"
+  }
+}
