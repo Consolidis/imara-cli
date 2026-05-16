@@ -32,7 +32,7 @@ export const TOOLS_DEFINITIONS: ToolDefinition[] = [
 
 export class ToolExecutor {
   static async execute(name: string, args: ToolArguments, agent?: AgentProxy): Promise<Result<string, ImaraError>> {
-    const guard = this.guardConductor(name);
+    const guard = this.guardConductor(name, args);
     if (!guard.ok) return guard;
 
     try {
@@ -79,9 +79,14 @@ export class ToolExecutor {
     }
   }
 
-  private static guardConductor(name: string): Result<void, ImaraError> {
+  private static guardConductor(name: string, args?: ToolArguments): Result<void, ImaraError> {
     const dangerous = new Set(['write_file', 'append_file', 'replace_in_file', 'run_command']);
     const track = TrackManager.getActive();
+
+    // Exemption : meta-fichiers Conductor (spec, plan, log du track actif)
+    const targetPath = typeof args?.path === 'string' ? args.path : '';
+    if (targetPath.startsWith('.imara/conductor/')) return ok(undefined);
+
     if (track && !track.validated && dangerous.has(name)) {
       return err(new ImaraError(ErrorCategory.CONDUCTOR, 'TRACK_NOT_VALIDATED', `BARRIÈRE CONDUCTOR : "${name}" bloqué — plan du track non validé.`));
     }

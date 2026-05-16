@@ -2,19 +2,56 @@
 import chalk from 'chalk';
 import { theme } from '../theme';
 
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+let spinnerIndex = 0;
+let spinnerInterval: ReturnType<typeof setInterval> | null = null;
+
 export function showToolCall(name: string, args: Record<string, unknown>, durationMs?: number): void {
   const icon = toolIcon(name);
   const label = toolLabel(name, args);
   const duration = durationMs ? chalk.hex(theme.muted)(` ${durationMs}ms`) : '';
-  
+
+  // Stop any running spinner before writing final result
+  if (spinnerInterval) {
+    clearInterval(spinnerInterval);
+    spinnerInterval = null;
+  }
+
   const line = `  ${icon} ${chalk.hex(theme.muted)(label)}${duration}`;
-  
+
   // Clear current line and write (using \r to allow overwrite)
   process.stdout.write('\r' + ' '.repeat(process.stdout.columns || 80) + '\r');
   process.stdout.write(line);
-  
+
   if (durationMs) {
     process.stdout.write('\n'); // New line only after result is in
+  }
+}
+
+export function startToolCallSpinner(name: string, args: Record<string, unknown>): void {
+  if (spinnerInterval) clearInterval(spinnerInterval);
+
+  const label = toolLabel(name, args);
+  spinnerIndex = 0;
+
+  const tick = () => {
+    const frame = chalk.hex(theme.warning)(SPINNER_FRAMES[spinnerIndex % SPINNER_FRAMES.length]);
+    const line = `  ${frame} ${chalk.hex(theme.muted)(label)}`;
+    process.stdout.write('\r' + ' '.repeat(process.stdout.columns || 80) + '\r');
+    process.stdout.write(line);
+    spinnerIndex++;
+  };
+
+  tick();
+  spinnerInterval = setInterval(tick, 80);
+}
+
+export function stopToolCallSpinner(): void {
+  if (spinnerInterval) {
+    clearInterval(spinnerInterval);
+    spinnerInterval = null;
+    process.stdout.write('\r' + ' '.repeat(process.stdout.columns || 80) + '\r');
   }
 }
 

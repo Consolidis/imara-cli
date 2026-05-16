@@ -5,6 +5,9 @@ import { requireAuth } from '../../auth/auth';
 import { ProjectAnalyzer } from '../../context/project-analyzer';
 import { SessionManager } from '../../context/session-manager';
 import { theme } from '../../ui/theme';
+import { renderStatusBar } from '../../ui/components/status-bar';
+import { showErrorPanel } from '../../ui/components/error-panel';
+import { TrackManager } from '../../context/conductor/track-manager';
 import { renderWelcome } from '../../ui/screens/welcome';
 
 interface ChatOptions {
@@ -51,13 +54,12 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
   console.log(chalk.dim('Tapez /exit pour quitter, /help pour les commandes spéciales.'));
 
   // Show active track if any
-  const { TrackManager } = require('../../context/conductor/track-manager');
   const active = TrackManager.getActive();
   if (active) {
     console.log(`\n  ${chalk.hex(theme.primary).bold('📍 TRACK ACTIF')} : ${chalk.hex(theme.accent)(active.id)}`);
     console.log(`  ${chalk.hex(theme.muted)(active.title)}`);
     if (!active.validated) {
-      console.log(chalk.hex(theme.warning ?? '#ffaa00')('  ⚠ Le plan n\'est pas encore validé. Utilisez /approve pour débloquer le codage.\n'));
+      console.log(chalk.hex(theme.warning)('  ⚠ Le plan n\'est pas encore validé. Utilisez /approve pour débloquer le codage.\n'));
     } else {
       console.log(chalk.hex(theme.accent)('  ✓ Plan validé. Prêt à coder.\n'));
     }
@@ -67,12 +69,26 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
 
   let isProcessing = false;
 
+  function printStatus() {
+    const stats = agent.getSessionStats();
+    const track = TrackManager.getActive();
+    renderStatusBar({
+      model: agent.getModel(),
+      tokens: stats.tokens,
+      costFcfa: stats.cost,
+      trackId: track?.id,
+      phase: isProcessing ? 'thinking' : 'idle',
+    });
+  }
+
+  printStatus();
   rl.prompt();
 
   rl.on('line', async (line) => {
     if (isProcessing) {
-      console.log(chalk.hex(theme.warning ?? '#ffaa00')('  Veuillez patienter, l\'IA réfléchit...'));
-      // Ne pas relancer rl.prompt() ici pour ne pas casser l'affichage du spinner
+      console.log(chalk.hex(theme.warning)('  Veuillez patienter, l\'IA réfléchit...'));
+      printStatus();
+      rl.prompt();
       return;
     }
 
@@ -115,21 +131,20 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
     }
 
     if (input === '/track') {
-      const { TrackManager } = require('../../context/conductor/track-manager');
-      const { track, plan } = TrackManager.status();
-      
-      if (!track) {
+      const status = TrackManager.status();
+
+      if (!status.track) {
         console.log(chalk.hex(theme.muted)('\n  Aucun track actif dans ce projet.\n'));
       } else {
-        console.log(`\n  ${chalk.hex(theme.primary).bold('TRACK ACTIF')} : ${chalk.hex(theme.accent)(track.id)}`);
-        console.log(`  ${chalk.hex(theme.muted)(track.title)}\n`);
-        
-        const tasks = plan.split('\n').filter((l: string) => l.match(/^\s*- \[[ x~]\]/));
+        console.log(`\n  ${chalk.hex(theme.primary).bold('TRACK ACTIF')} : ${chalk.hex(theme.accent)(status.track.id)}`);
+        console.log(`  ${chalk.hex(theme.muted)(status.track.title)}\n`);
+
+        const tasks = status.plan.split('\n').filter((l: string) => l.match(/^\s*- \[[ x~]\]/));
         if (tasks.length > 0) {
           tasks.slice(0, 10).forEach((t: string) => {
             const done = t.includes('[x]');
             const inprog = t.includes('[~]');
-            const icon = done ? chalk.hex(theme.accent)('✓') : inprog ? chalk.hex(theme.warning ?? '#ffaa00')('~') : chalk.hex(theme.muted)('○');
+            const icon = done ? chalk.hex(theme.accent)('✓') : inprog ? chalk.hex(theme.warning)('~') : chalk.hex(theme.muted)('○');
             const text = t.replace(/^\s*- \[[ x~]\]\s*/, '');
             console.log(`    ${icon} ${done ? chalk.hex(theme.muted)(text) : chalk.hex(theme.text)(text)}`);
           });
@@ -141,7 +156,6 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
     }
 
     if (input === '/approve') {
-      const { TrackManager } = require('../../context/conductor/track-manager');
       const active = TrackManager.getActive();
       if (!active) {
         console.log(chalk.hex(theme.muted)('\n  Aucun track actif.\n'));
@@ -154,12 +168,11 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
     }
 
     if (input === '/archive') {
-      const { TrackManager } = require('../../context/conductor/track-manager');
       const active = TrackManager.getActive();
       if (!active) {
         console.log(chalk.hex(theme.muted)('\n  Aucun track actif.\n'));
       } else {
-        console.log(chalk.hex(theme.warning ?? '#ffaa00')('\n  Archivage du track en cours...'));
+        console.log(chalk.hex(theme.warning)('\n  Archivage du track en cours...'));
         TrackManager.clearActive();
         console.log(chalk.hex(theme.accent)('  ✓ Track terminé et retiré de la session.\n'));
       }
@@ -179,7 +192,7 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
 
     if (input === '/clear') {
       agent.clearHistory();
-      console.log(chalk.hex(theme.warning ?? '#ffaa00')('\n  Historique effacé.\n'));
+      console.log(chalk.hex(theme.warning)('\n  Historique effacé.\n'));
       rl.prompt();
       return;
     }
@@ -225,11 +238,15 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
     try {
       await agent.run(input);
     } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      console.error(chalk.red(`\nErreur: ${errMsg}`));
+      if (error instanceof Error) {
+        showErrorPanel(error);
+      } else {
+        console.error(chalk.red(`\nErreur: ${error}`));
+      }
     } finally {
       isProcessing = false;
     }
+    printStatus();
     rl.prompt();
   });
 

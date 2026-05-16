@@ -3,7 +3,7 @@ import { ImaraClient } from '../api/imara-client';
 import { Keychain } from '../auth/keychain';
 import { ToolExecutor } from './tools';
 import { ContextBuilder } from '../context/context-builder';
-import { showResponse, showToolCall, showToolResult, showIntention } from '../ui/renderer';
+import { showResponse, showToolCall, showToolResult, showIntention, startToolCallSpinner, stopToolCallSpinner } from '../ui/renderer';
 import { confirmAction } from '../ui/confirm';
 import { TrackLogger } from '../context/conductor/track-logger';
 import ora from 'ora';
@@ -142,30 +142,34 @@ export class Agent {
   private async handleToolCall(toolCall: ParsedToolCall, isSilent: boolean): Promise<void> {
     const { id, name, arguments: args } = toolCall;
 
-    if (!isSilent) showToolCall(name, args);
+    if (!isSilent) startToolCallSpinner(name, args);
 
     if (this.isDangerousTool(name) && !this.options.yes) {
+      stopToolCallSpinner();
       const confirmed = await confirmAction(`Voulez-vous exécuter le tool "${name}" ?`);
       if (!confirmed) {
         this.pushToolResult(id, name, 'Exécution annulée par l\'utilisateur.');
         showToolResult(name, 'Annulé');
         return;
       }
+      startToolCallSpinner(name, args);
     }
 
     const start = Date.now();
     const result = await ToolExecutor.execute(name, args, this);
     const duration = Date.now() - start;
 
+    stopToolCallSpinner();
+
     if (result.ok) {
       this.pushToolResult(id, name, result.value);
       TrackLogger.log(name, args, result.value, duration);
-      if (!isSilent) showToolResult(name, result.value, duration);
+      if (!isSilent) showToolCall(name, args, duration);
     } else {
       const errMsg = result.error.message;
       this.pushToolResult(id, name, `Erreur: ${errMsg}`);
       TrackLogger.log(name, args, null, duration, errMsg);
-      showToolResult(name, `Erreur: ${errMsg}`);
+      showToolCall(name, { error: errMsg }, duration);
     }
   }
 
@@ -192,6 +196,7 @@ export class Agent {
   }
 
   setModel(model: string): void { this.options.model = model; }
+  getModel(): string { return this.options.model; }
   getMessages(): Message[] { return [...this.messages]; }
   setMessages(messages: Message[]): void { this.messages = [...messages]; }
 }

@@ -1,19 +1,32 @@
-// src/ui/theme.ts
+// src/ui/theme.ts — Design System Imara CLI
+
+export const palette = {
+  primary:   '#4B8BF5',
+  secondary: '#8AB4F8',
+  accent:    '#81C995',
+  warning:   '#FDD663',
+  error:     '#F28B82',
+  muted:     '#9AA0A6',
+  text:      '#E8EAED',
+  toolBg:    '#1E2A3A',
+  bg:        '#0D1117',
+} as const;
 
 export const theme = {
-  primary: '#4B8BF5',      // Bleu Gemini — titres, nom du modèle
-  secondary: '#8AB4F8',    // Bleu clair — labels
-  accent: '#81C995',       // Vert — succès, résultats tools
-  warning: '#FDD663',      // Jaune — warnings
-  error: '#F28B82',        // Rouge — erreurs
-  muted: '#9AA0A6',        // Gris — texte secondaire, métadonnées
-  text: '#E8EAED',         // Blanc cassé — texte principal
-  toolBg: '#1E2A3A',       // Fond foncé bleuté — blocs tool calls
+  ...palette,
+  // ANSI-safe fallback for basic terminals
+  primary16:   33,  // blue
+  secondary16: 75,  // light blue
+  accent16:    78,  // green
+  warning16:   220, // yellow
+  error16:     196, // red
+  muted16:     245, // gray
+  text16:      255, // white
 };
 
-/**
- * Utility to wrap text to a certain width
- */
+export type ThemeColor = keyof typeof palette;
+
+/** Wrap text to a given width preserving paragraphs */
 export function wrapText(text: string, width: number): string[] {
   const lines: string[] = [];
   const paragraphs = text.split('\n');
@@ -23,20 +36,21 @@ export function wrapText(text: string, width: number): string[] {
       lines.push('');
       continue;
     }
-
-    let currentLine = '';
-    const words = paragraph.split(' ');
-
-    for (const word of words) {
-      if ((currentLine + word).length <= width) {
-        currentLine += (currentLine ? ' ' : '') + word;
+    let current = '';
+    for (const word of paragraph.split(' ')) {
+      if ((current + word).length <= width) {
+        current += (current ? ' ' : '') + word;
       } else {
-        lines.push(currentLine);
-        currentLine = word;
+        lines.push(current);
+        current = word;
       }
     }
-    lines.push(currentLine);
+    lines.push(current);
   }
-
   return lines;
+}
+
+/** Small helper: colorize by theme key safely */
+export function color16(key: ThemeColor): number {
+  return theme[`${key}16` as keyof typeof theme] as number;
 }
