@@ -55,8 +55,8 @@ export class ImaraClient {
       if (response.status === 400) {
         let errorMsg = 'Erreur 400 (Bad Request).';
         try {
-          const errBody = await response.json() as any;
-          const raw: string = errBody?.message || errBody?.error || '';
+          const errBody = await response.json() as Record<string, unknown>;
+          const raw = String(errBody?.message || errBody?.error || '');
           if (raw.toLowerCase().includes('context') || raw.toLowerCase().includes('token') || raw.toLowerCase().includes('length')) {
             errorMsg = 'Le contexte de la conversation est trop lourd pour le modèle. Tapez /clear pour vider la mémoire.';
           } else if (!isTechnicalError(raw)) {
@@ -80,9 +80,8 @@ export class ImaraClient {
 
       let errorMsg = `Erreur inattendue (code ${response.status}). Réessayez ou contactez le support.`;
       try {
-        const errBody = await response.json() as any;
-        // Sanitize: never expose raw Cloudflare/internal details
-        const raw: string = errBody?.message || errBody?.error || '';
+        const errBody = await response.json() as Record<string, unknown>;
+        const raw = String(errBody?.message || errBody?.error || '');
         if (!isTechnicalError(raw)) {
           errorMsg = raw || errorMsg;
         }

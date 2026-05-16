@@ -22,8 +22,9 @@ export async function whoamiCommand() {
     console.log(`  Email:   ${userInfo.email}`);
     console.log(`  Rôle:    ${userInfo.role}`);
     console.log(`  Solde:   ${userInfo.walletBalance} FCFA`);
-  } catch (error: any) {
+  } catch (error) {
     stopSpinner();
-    console.error(chalk.red(`\nErreur lors de la récupération des informations: ${error.message}`));
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error(chalk.red(`\nErreur lors de la récupération des informations: ${errMsg}`));
   }
 }

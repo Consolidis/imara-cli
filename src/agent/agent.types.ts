@@ -1,10 +1,13 @@
-export interface Message {
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
-  tool_calls?: ToolCall[];
-  tool_call_id?: string;
-  name?: string;
-}
+// Types JSON pour les schemas d'outils
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+export type ToolArguments = Record<string, JsonValue>;
 
 export interface ToolCall {
   id: string;
@@ -15,14 +18,24 @@ export interface ToolCall {
   };
 }
 
+export interface ParsedToolCall {
+  id: string;
+  name: string;
+  arguments: ToolArguments;
+}
+
+export interface Message {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
+  name?: string;
+}
+
 export interface AgentResponse {
   content: string;
   finishReason: 'stop' | 'tool_calls';
-  toolCalls: Array<{
-    id: string;
-    name: string;
-    arguments: any;
-  }>;
+  toolCalls: ParsedToolCall[];
   usage: {
     promptTokens: number;
     completionTokens: number;
@@ -48,12 +61,33 @@ export interface UserInfo {
   walletBalance: number;
 }
 
+export interface ToolParameter {
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object';
+  description?: string;
+  enum?: string[];
+  items?: ToolParameter;
+  properties?: Record<string, ToolParameter>;
+  required?: string[];
+  default?: JsonValue;
+}
+
 export interface ToolDefinition {
   name: string;
   description: string;
   parameters: {
     type: 'object';
-    properties: Record<string, any>;
+    properties: Record<string, ToolParameter>;
     required?: string[];
   };
+}
+
+export interface ToolResult {
+  content: string;
+  error?: string;
+  durationMs?: number;
+}
+
+export interface AgentProxy {
+  getMessages(): Message[];
+  setMessages(messages: Message[]): void;
 }

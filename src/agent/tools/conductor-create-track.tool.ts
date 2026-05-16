@@ -14,12 +14,13 @@ export class ConductorCreateTrackTool {
     }
   };
 
-  static async run(args: { title: string }) {
+  static async run(args: { title: string }): Promise<string> {
     try {
       const track = TrackManager.newTrack(args.title);
       return `Succès : Track "${track.id}" créé avec succès.\nVous devez maintenant :\n1. Rédiger les spécifications dans ${track.id}/spec.md\n2. Définir les étapes dans ${track.id}/plan.md\n3. Demander l'approbation de l'utilisateur avant de commencer à coder.`;
-    } catch (error: any) {
-      return `Erreur : ${error.message}`;
+    } catch (error) {
+      const err = error instanceof Error ? error.message : String(error);
+      return `Erreur : ${err}`;
     }
   }
 }

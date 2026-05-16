@@ -1,33 +1,26 @@
-import { Message, AgentOptions, ToolCall, AgentResponse } from './agent.types';
+import { Message, AgentOptions, ParsedToolCall, ToolResult, ToolArguments } from './agent.types';
 import { ImaraClient } from '../api/imara-client';
 import { Keychain } from '../auth/keychain';
 import { ToolExecutor } from './tools';
 import { ContextBuilder } from '../context/context-builder';
-import { showResponse, showToolCall, showToolResult, showTokenUsage, showIntention } from '../ui/renderer';
+import { showResponse, showToolCall, showToolResult, showIntention } from '../ui/renderer';
 import { confirmAction } from '../ui/confirm';
 import { TrackLogger } from '../context/conductor/track-logger';
 import ora from 'ora';
 import { getAutoConfirm } from '../utils/env';
 import chalk from 'chalk';
 import { theme } from '../ui/theme';
+import { fromUnknown, ImaraError } from '../types/errors';
+import { Result } from '../types/result';
 
-/**
- * Sanitizes error messages to hide technical/internal details from the user.
- * This is the last-resort fallback — the API client already handles most cases.
- */
 function sanitizeErrorMessage(msg: string): string {
   const technicalPatterns = [
-    /cloudflare/i,
-    /AiError/i,
-    /Capacity temporarily exceeded/i,
-    /\{"errors":/,
-    /\{"success":/,
-    /Error:\s+Error:/,
-    /ee[0-9a-f]{6,}/i,
-    /at\s+\w+\s+\(.*:\d+:\d+\)/,
+    /cloudflare/i, /AiError/i, /Capacity temporarily exceeded/i,
+    /\{"errors":/, /\{"success":/, /Error:\s+Error:/,
+    /ee[0-9a-f]{6,}/i, /at\s+\w+\s+\(.*:\d+:\d+\)/,
   ];
   if (technicalPatterns.some(p => p.test(msg))) {
-    if (/429|Capacity|saturé|quota/i.test(msg)) {
+    if (/429|Capacity|satur[eé]|quota/i.test(msg)) {
       return 'Le service est temporairement saturé. Réessayez dans quelques secondes.';
     }
     if (/401|unauthorized|authentifi/i.test(msg)) {
@@ -40,7 +33,7 @@ function sanitizeErrorMessage(msg: string): string {
 
 export class Agent {
   private messages: Message[] = [];
-  private options: AgentOptions;
+  private options: Required<AgentOptions>;
   private client: ImaraClient | null = null;
   private maxIterations = 20;
   private totalTokensUsed = 0;
@@ -48,108 +41,76 @@ export class Agent {
 
   constructor(options: AgentOptions = {}) {
     this.options = {
-      model: 'zuri',
-      yes: false,
-      execute: true,
-      maxTokens: 8192,
-      contextDepth: 2,
-      ...options
+      model: options.model ?? 'zuri',
+      yes: options.yes ?? false,
+      execute: options.execute ?? true,
+      maxTokens: options.maxTokens ?? 8192,
+      contextDepth: options.contextDepth ?? 2,
     };
-    
-    if (getAutoConfirm()) {
-      this.options.yes = true;
-    }
+    if (getAutoConfirm()) this.options.yes = true;
   }
 
-  async run(prompt: string) {
+  async run(prompt: string): Promise<void> {
     if (!this.client) {
       const apiKey = await Keychain.get();
-      if (!apiKey && !process.env.IMARA_API_KEY) throw new Error('Non authentifié. Lancez `imara login`.');
+      if (!apiKey && !process.env.IMARA_API_KEY) {
+        throw new Error('Non authentifié. Lancez `imara login`.');
+      }
       this.client = new ImaraClient(apiKey || '');
     }
 
-    // Initialize context if first message
     if (this.messages.length === 0) {
       const systemPrompt = await ContextBuilder.buildSystemPrompt(this.options);
       this.messages.push({ role: 'system', content: systemPrompt });
     }
 
-    const silentTools = ['list_directory'];
-
     this.messages.push({ role: 'user', content: prompt });
+    await this.runLoop();
+  }
 
+  private async runLoop(): Promise<void> {
+    const silentTools = new Set(['list_directory']);
     let iterations = 0;
+
     while (iterations < this.maxIterations) {
       iterations++;
-
-      // Dynamic spinner phase: first call = Analyse, subsequent = Synthèse
       const spinnerText = iterations === 1
         ? chalk.hex(theme.muted)('Analyse de la demande...')
         : chalk.hex(theme.muted)('Synthèse des résultats...');
-
       const spinner = ora({
         text: spinnerText,
-        spinner: {
-          frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
-          interval: 80
-        }
+        spinner: { frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'], interval: 80 }
       }).start();
-      
+
       try {
-        const response = await this.client.chat(this.messages, this.options);
+        const response = await this.client!.chat(this.messages, this.options);
         spinner.stop();
 
         this.totalTokensUsed += response.usage.totalTokens;
         this.totalCostFcfa += response.usage.costFcfa;
 
-        const isAck = (text: string): boolean => {
-          const ackPhrases = ['merci', 'bien sûr', 'voici', 'je vais', 'je viens de', 'parfait', 'd\'accord', 'entendu', 'compris'];
-          const isShort = text.trim().split(' ').length < 20;
-          return isShort && ackPhrases.some(p => text.trim().toLowerCase().startsWith(p));
-        };
-
         if (response.content) {
           this.messages.push({ role: 'assistant', content: response.content });
-          
-          // Don't show if it's just an acknowledgment before tool calls
-          if (!(response.finishReason === 'tool_calls' && isAck(response.content))) {
-             showResponse(response.content);
+          if (!this.isAck(response.content) || response.finishReason !== 'tool_calls') {
+            showResponse(response.content);
           }
         }
 
-        if (response.finishReason === 'tool_calls' && response.toolCalls) {
-          const assistantMsg: any = {
-            role: 'assistant',
-            tool_calls: response.toolCalls.map((tc: any) => ({
-              id: tc.id,
-              type: 'function',
-              function: { name: tc.name, arguments: JSON.stringify(tc.arguments) }
-            }))
-          };
-          if (response.content) {
-            assistantMsg.content = response.content;
-          }
-          this.messages.push(assistantMsg);
-
+        if (response.finishReason === 'tool_calls' && response.toolCalls.length > 0) {
+          this.pushAssistantToolCalls(response);
           for (const toolCall of response.toolCalls) {
-            const isSilent = silentTools.includes(toolCall.name);
-            // Show intention BEFORE execution for transparency
-            if (!isSilent) {
-              showIntention(toolCall.name, toolCall.arguments);
-            }
+            const isSilent = silentTools.has(toolCall.name);
+            if (!isSilent) showIntention(toolCall.name, toolCall.arguments);
             await this.handleToolCall(toolCall, isSilent);
           }
           continue;
         }
 
-        // If it was just an acknowledgment at the end, don't show it (or loop again if needed)
-        // But usually 'stop' means we are done.
-
         break;
-      } catch (error: any) {
-        const userMessage = sanitizeErrorMessage(error.message || String(error));
+      } catch (error) {
+        const imaraErr = fromUnknown(error);
+        const userMessage = sanitizeErrorMessage(imaraErr.message);
         spinner.fail(chalk.hex(theme.error)(userMessage));
-        // Re-throw with sanitized message so chat.command.ts also shows clean output
         throw new Error(userMessage);
       }
     }
@@ -159,96 +120,78 @@ export class Agent {
     }
   }
 
-  private async handleToolCall(toolCall: any, isSilent: boolean = false) {
+  private isAck(text: string): boolean {
+    const ackPhrases = ['merci', 'bien sûr', 'voici', 'je vais', 'je viens de', 'parfait', 'd\'accord', 'entendu', 'compris'];
+    const isShort = text.trim().split(/\s+/).length < 20;
+    return isShort && ackPhrases.some(p => text.trim().toLowerCase().startsWith(p));
+  }
+
+  private pushAssistantToolCalls(response: { content: string; toolCalls: ParsedToolCall[] }): void {
+    const assistantMsg: Message = {
+      role: 'assistant',
+      content: response.content || '',
+      tool_calls: response.toolCalls.map(tc => ({
+        id: tc.id,
+        type: 'function',
+        function: { name: tc.name, arguments: JSON.stringify(tc.arguments) }
+      }))
+    };
+    this.messages.push(assistantMsg);
+  }
+
+  private async handleToolCall(toolCall: ParsedToolCall, isSilent: boolean): Promise<void> {
     const { id, name, arguments: args } = toolCall;
 
-    if (!isSilent) {
-      showToolCall(name, args);
-    }
+    if (!isSilent) showToolCall(name, args);
 
-    // Security check for dangerous tools
-    if (this.isDangerousTool(name, args) && !this.options.yes) {
+    if (this.isDangerousTool(name) && !this.options.yes) {
       const confirmed = await confirmAction(`Voulez-vous exécuter le tool "${name}" ?`);
       if (!confirmed) {
-        this.messages.push({
-          role: 'tool',
-          tool_call_id: id,
-          name: name,
-          content: 'Exécution annulée par l\'utilisateur.'
-        });
+        this.pushToolResult(id, name, 'Exécution annulée par l\'utilisateur.');
         showToolResult(name, 'Annulé');
         return;
       }
     }
 
     const start = Date.now();
-    try {
-      const result = await ToolExecutor.execute(name, args, this);
-      const duration = Date.now() - start;
-      
-      let toolContent = typeof result === 'string' ? result : JSON.stringify(result);
-      if (!toolContent || toolContent.trim() === '') {
-        toolContent = 'Action effectuée avec succès.';
-      }
-      
-      this.messages.push({
-        role: 'tool',
-        tool_call_id: id,
-        name: name,
-        content: toolContent
-      });
+    const result = await ToolExecutor.execute(name, args, this);
+    const duration = Date.now() - start;
 
-      // Auto-log to active track
-      TrackLogger.log(name, args, typeof result === 'string' ? result : JSON.stringify(result), duration);
-
-      if (!isSilent) {
-        showToolResult(name, result, duration);
-      }
-    } catch (error: any) {
-      const duration = Date.now() - start;
-      this.messages.push({
-        role: 'tool',
-        tool_call_id: id,
-        name: name,
-        content: `Erreur: ${error.message}`
-      });
-
-      // Log the error too
-      TrackLogger.log(name, args, null, duration, error.message);
-
-      showToolResult(name, `Erreur: ${error.message}`);
+    if (result.ok) {
+      this.pushToolResult(id, name, result.value);
+      TrackLogger.log(name, args, result.value, duration);
+      if (!isSilent) showToolResult(name, result.value, duration);
+    } else {
+      const errMsg = result.error.message;
+      this.pushToolResult(id, name, `Erreur: ${errMsg}`);
+      TrackLogger.log(name, args, null, duration, errMsg);
+      showToolResult(name, `Erreur: ${errMsg}`);
     }
   }
 
-  private isDangerousTool(name: string, args: any): boolean {
-    if (name === 'run_command') return true;
-    if (name === 'write_file') return true;
-    if (name === 'delete_file') return true;
-    return false;
+  private pushToolResult(id: string, name: string, content: string): void {
+    this.messages.push({
+      role: 'tool',
+      tool_call_id: id,
+      name,
+      content
+    });
   }
 
-  public getSessionStats() {
-    return {
-      tokens: this.totalTokensUsed,
-      cost: this.totalCostFcfa,
-      messages: this.messages.length
-    };
+  private isDangerousTool(name: string): boolean {
+    return name === 'run_command' || name === 'write_file' || name === 'delete_file';
   }
 
-  public clearHistory() {
+  getSessionStats(): { tokens: number; cost: number; messages: number } {
+    return { tokens: this.totalTokensUsed, cost: this.totalCostFcfa, messages: this.messages.length };
+  }
+
+  clearHistory(): void {
     const systemPrompt = this.messages.find(m => m.role === 'system');
     this.messages = systemPrompt ? [systemPrompt] : [];
   }
 
-  public setModel(model: string) {
-    this.options.model = model;
-  }
-
-  public getMessages() {
-    return this.messages;
-  }
-
-  public setMessages(messages: Message[]) {
-    this.messages = messages;
-  }
+  setModel(model: string): void { this.options.model = model; }
+  getMessages(): Message[] { return [...this.messages]; }
+  setMessages(messages: Message[]): void { this.messages = [...messages]; }
 }

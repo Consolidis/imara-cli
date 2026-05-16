@@ -14,7 +14,7 @@ export class ConductorValidatePlanTool {
     }
   };
 
-  static async run(args: { confirmation: boolean }) {
+  static async run(args: { confirmation: boolean }): Promise<string> {
     if (!args.confirmation) return 'Validation annulée.';
     
     const track = TrackManager.getActive();

@@ -18,7 +18,7 @@ export class ReadFileRangeTool {
     }
   };
 
-  static async run(args: { path: string, start_line?: number, end_line: number }) {
+  static async run(args: { path: string, start_line?: number, end_line: number }): Promise<string> {
     const fullPath = path.resolve(process.cwd(), args.path);
 
     if (!isInsideCwd(fullPath)) {

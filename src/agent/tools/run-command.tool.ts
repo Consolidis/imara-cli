@@ -22,7 +22,7 @@ export class RunCommandTool {
     }
   };
 
-  static async run(args: { command: string }) {
+  static async run(args: { command: string }): Promise<string> {
     const cmd = args.command.toLowerCase();
     
     if (BLACKLISTED_COMMANDS.some(b => cmd.includes(b))) {

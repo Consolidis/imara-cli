@@ -9,7 +9,7 @@ import { theme } from '../theme';
  * This gives the user real-time visibility into what the agent is about to do,
  * similar to Gemini CLI / Claude Code transparency patterns.
  */
-export function showIntention(name: string, args: any): void {
+export function showIntention(name: string, args: Record<string, unknown>): void {
   const icon = intentionIcon(name);
   const label = intentionLabel(name, args);
 
@@ -32,11 +32,11 @@ function intentionIcon(name: string): string {
   return icons[name] ?? chalk.hex(theme.muted)('○');
 }
 
-function intentionLabel(name: string, args: any): string {
-  const getPath    = (a: any) => a?.path || a?.file_path || a?.filepath || a?.filename || '';
-  const getQuery   = (a: any) => a?.query || a?.search || a?.q || '';
-  const getCmd     = (a: any) => a?.command || a?.cmd || '';
-  const getPattern = (a: any) => a?.pattern || a?.regex || a?.search || '';
+function intentionLabel(name: string, args: Record<string, unknown>): string {
+  const getPath    = (a: Record<string, unknown>) => String(a?.path || a?.file_path || a?.filepath || a?.filename || '');
+  const getQuery   = (a: Record<string, unknown>) => String(a?.query || a?.search || a?.q || '');
+  const getCmd     = (a: Record<string, unknown>) => String(a?.command || a?.cmd || '');
+  const getPattern = (a: Record<string, unknown>) => String(a?.pattern || a?.regex || a?.search || '');
 
   switch (name) {
     case 'read_file':
@@ -52,7 +52,7 @@ function intentionLabel(name: string, args: any): string {
     case 'search_files':
       return `Recherche du pattern "${String(getPattern(args)).slice(0, 40)}"`;
     case 'read_multiple_files':
-      return `Lecture de ${(args?.paths || []).length} fichier(s)`;
+      return `Lecture de ${((args?.paths as string[] | undefined) || []).length} fichier(s)`;
     case 'web_search':
       return `Recherche web : "${String(getQuery(args)).slice(0, 50)}"`;
     default:

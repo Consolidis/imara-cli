@@ -18,18 +18,18 @@ export class ReadMultipleFilesTool {
     }
   };
 
-  static async run(args: { paths: string[] }) {
+  static async run(args: { paths: string[] }): Promise<string> {
     const results = await Promise.all(
       args.paths.map(async (p) => {
         try {
           const content = await ReadFileTool.run({ path: p });
           return `--- FILE: ${p} ---\n${content}\n`;
-        } catch (error: any) {
-          return `--- FILE: ${p} (ERROR) ---\n${error.message}\n`;
+        } catch (error) {
+          const err = error instanceof Error ? error.message : String(error);
+          return `--- FILE: ${p} (ERROR) ---\n${err}\n`;
         }
       })
     );
-
     return results.join('\n');
   }
 }

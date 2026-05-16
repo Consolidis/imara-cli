@@ -2,7 +2,7 @@
 import chalk from 'chalk';
 import { theme } from '../theme';
 
-export function showToolCall(name: string, args: any, durationMs?: number): void {
+export function showToolCall(name: string, args: Record<string, unknown>, durationMs?: number): void {
   const icon = toolIcon(name);
   const label = toolLabel(name, args);
   const duration = durationMs ? chalk.hex(theme.muted)(` ${durationMs}ms`) : '';
@@ -30,12 +30,11 @@ function toolIcon(name: string): string {
   return chalk.hex(theme.muted)(icons[name] ?? '○');
 }
 
-function toolLabel(name: string, args: any): string {
-  // Defensive: try multiple common key names for each tool
-  const getPath = (a: any) => a.path || a.file_path || a.filepath || a.filename || '';
-  const getQuery = (a: any) => a.query || a.search || a.q || '';
-  const getCmd = (a: any) => a.command || a.cmd || a.args || '';
-  const getPattern = (a: any) => a.pattern || a.regex || a.search || '';
+function toolLabel(name: string, args: Record<string, unknown>): string {
+  const getPath = (a: Record<string, unknown>) => String(a.path || a.file_path || a.filepath || a.filename || '');
+  const getQuery = (a: Record<string, unknown>) => String(a.query || a.search || a.q || '');
+  const getCmd = (a: Record<string, unknown>) => String(a.command || a.cmd || a.args || '');
+  const getPattern = (a: Record<string, unknown>) => String(a.pattern || a.regex || a.search || '');
 
   switch (name) {
     case 'read_file': return `Lecture · ${getPath(args)}`;
@@ -43,7 +42,7 @@ function toolLabel(name: string, args: any): string {
     case 'list_directory': return `Exploration · ${getPath(args) || 'racine'}`;
     case 'run_command': return `Exécution · ${getCmd(args)}`;
     case 'search_files': return `Recherche · "${getPattern(args)}"`;
-    case 'read_multiple_files': return `Lecture multiple · ${(args.paths || []).length} fichier(s)`;
+    case 'read_multiple_files': return `Lecture multiple · ${((args.paths as string[] | undefined) || []).length} fichier(s)`;
     case 'web_search': return `Web · ${getQuery(args)}`;
     default: return name;
   }

@@ -58,7 +58,8 @@ export async function initConductorCommand() {
     console.log(chalk.hex(theme.muted)('  Conseil : Commencez par créer un track pour votre prochaine tâche :'));
     console.log(chalk.hex(theme.secondary)(`  $ imara track new "Initialiser les fonctionnalités de base"\n`));
     
-  } catch (error: any) {
-    console.error(chalk.red(`  Erreur lors de l'initialisation : ${error.message}`));
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error(chalk.red(`  Erreur lors de l'initialisation : ${errMsg}`));
   }
 }

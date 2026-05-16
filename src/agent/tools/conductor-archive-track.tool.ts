@@ -15,7 +15,7 @@ export class ConductorArchiveTrackTool {
     }
   };
 
-  static async run(args: { reason?: string }) {
+  static async run(args: { reason?: string }): Promise<string> {
     const track = TrackManager.getActive();
     if (!track) return 'Erreur : Aucun track actif.';
 
@@ -41,8 +41,9 @@ export class ConductorArchiveTrackTool {
       }
 
       return `Succès : Track "${track.id}" archivé dans ${path.relative(process.cwd(), dest)}.`;
-    } catch (error: any) {
-      return `Erreur lors de l'archivage : ${error.message}`;
+    } catch (error) {
+      const err = error instanceof Error ? error.message : String(error);
+      return `Erreur lors de l'archivage : ${err}`;
     }
   }
 }

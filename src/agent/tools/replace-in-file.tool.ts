@@ -19,7 +19,7 @@ export class ReplaceInFileTool {
     }
   };
 
-  static async run(args: { path: string, old_text: string, new_text: string }) {
+  static async run(args: { path: string, old_text: string, new_text: string }): Promise<string> {
     const fullPath = path.resolve(process.cwd(), args.path);
 
     if (!isInsideCwd(fullPath)) {

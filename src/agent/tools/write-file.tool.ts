@@ -18,7 +18,7 @@ export class WriteFileTool {
     }
   };
 
-  static async run(args: { path: string, content: string }) {
+  static async run(args: { path: string, content: string }): Promise<string> {
     const fullPath = path.resolve(process.cwd(), args.path);
 
     if (!isInsideCwd(fullPath)) {

@@ -16,7 +16,7 @@ export class ReadFileTool {
     }
   };
 
-  static async run(args: { path: string }) {
+  static async run(args: { path: string }): Promise<string> {
     const fullPath = path.resolve(process.cwd(), args.path);
 
     if (!isInsideCwd(fullPath)) {

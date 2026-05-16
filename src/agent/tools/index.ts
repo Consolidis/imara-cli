@@ -1,3 +1,7 @@
+import { ToolDefinition, ToolArguments, AgentProxy } from '../agent.types';
+import { Result, ok, err } from '../../types/result';
+import { ImaraError, fromUnknown, ErrorCategory } from '../../types/errors';
+import { TrackManager } from '../../context/conductor/track-manager';
 import { ReadFileTool } from './read-file.tool';
 import { WriteFileTool } from './write-file.tool';
 import { AppendFileTool } from './append-file.tool';
@@ -16,73 +20,71 @@ import { ConductorUpdatePlanTool } from './conductor-update-plan.tool';
 import { ConductorArchiveTrackTool } from './conductor-archive-track.tool';
 import { ConductorValidatePlanTool } from './conductor-validate-plan.tool';
 
-export const TOOLS_DEFINITIONS = [
-  ReadFileTool.definition,
-  WriteFileTool.definition,
-  AppendFileTool.definition,
-  ListDirectoryTool.definition,
-  RunCommandTool.definition,
-  SearchFilesTool.definition,
-  ReadMultipleFilesTool.definition,
-  WebSearchTool.definition,
-  ReplaceInFileTool.definition,
-  ReadFileRangeTool.definition,
-  CodeMapTool.definition,
-  GitDiffTool.definition,
-  ClearContextTool.definition,
-  ConductorCreateTrackTool.definition,
-  ConductorUpdatePlanTool.definition,
-  ConductorArchiveTrackTool.definition,
+export const TOOLS_DEFINITIONS: ToolDefinition[] = [
+  ReadFileTool.definition, WriteFileTool.definition, AppendFileTool.definition,
+  ListDirectoryTool.definition, RunCommandTool.definition, SearchFilesTool.definition,
+  ReadMultipleFilesTool.definition, WebSearchTool.definition, ReplaceInFileTool.definition,
+  ReadFileRangeTool.definition, CodeMapTool.definition, GitDiffTool.definition,
+  ClearContextTool.definition, ConductorCreateTrackTool.definition,
+  ConductorUpdatePlanTool.definition, ConductorArchiveTrackTool.definition,
   ConductorValidatePlanTool.definition
 ];
 
 export class ToolExecutor {
-  static async execute(name: string, args: any, agent?: any) {
-    const dangerousTools = ['write_file', 'append_file', 'replace_in_file', 'run_command'];
-    const track = require('../../context/conductor/track-manager').TrackManager.getActive();
+  static async execute(name: string, args: ToolArguments, agent?: AgentProxy): Promise<Result<string, ImaraError>> {
+    const guard = this.guardConductor(name);
+    if (!guard.ok) return guard;
 
-    if (track && !track.validated && dangerousTools.includes(name)) {
-      return `BARRIÈRE CONDUCTOR : Vous tentez d'utiliser "${name}" alors que le plan du track actif n'a pas été validé par l'utilisateur. Veuillez d'abord demander l'approbation formelle (Planning -> Validation).`;
-    }
-
-    switch (name) {
-      case 'read_file':
-        return await ReadFileTool.run(args);
-      case 'write_file':
-        return await WriteFileTool.run(args);
-      case 'append_file':
-        return await AppendFileTool.run(args);
-      case 'list_directory':
-        return await ListDirectoryTool.run(args);
-      case 'run_command':
-        return await RunCommandTool.run(args);
-      case 'search_files':
-        return await SearchFilesTool.run(args);
-      case 'read_multiple_files':
-        return await ReadMultipleFilesTool.run(args);
-      case 'web_search':
-        return await WebSearchTool.run(args);
-      case 'replace_in_file':
-        return await ReplaceInFileTool.run(args);
-      case 'read_file_range':
-        return await ReadFileRangeTool.run(args);
-      case 'code_map':
-        return await CodeMapTool.run(args);
-      case 'git_diff':
-        return await GitDiffTool.run(args);
-      case 'clear_context':
-        return await ClearContextTool.run(args, agent);
-      case 'conductor_create_track':
-        return await ConductorCreateTrackTool.run(args);
-      case 'conductor_update_plan':
-        return await ConductorUpdatePlanTool.run(args);
-      case 'conductor_archive_track':
-        return await ConductorArchiveTrackTool.run(args);
-      case 'conductor_validate_plan':
-        return await ConductorValidatePlanTool.run(args);
-      default:
-        throw new Error(`Tool inconnu: ${name}`);
+    try {
+      switch (name) {
+        case 'read_file':
+          return ok(await ReadFileTool.run(args as { path: string }));
+        case 'write_file':
+          return ok(await WriteFileTool.run(args as { path: string; content: string }));
+        case 'append_file':
+          return ok(await AppendFileTool.run(args as { path: string; content: string }));
+        case 'list_directory':
+          return ok(await ListDirectoryTool.run(args as { path?: string; recursive?: boolean }));
+        case 'run_command':
+          return ok(await RunCommandTool.run(args as { command: string }));
+        case 'search_files':
+          return ok(await SearchFilesTool.run(args as { pattern: string; filePattern?: string }));
+        case 'read_multiple_files':
+          return ok(await ReadMultipleFilesTool.run(args as { paths: string[] }));
+        case 'web_search':
+          return ok(await WebSearchTool.run(args as { query: string }));
+        case 'replace_in_file':
+          return ok(await ReplaceInFileTool.run(args as { path: string; old_text: string; new_text: string }));
+        case 'read_file_range':
+          return ok(await ReadFileRangeTool.run(args as { path: string; start_line?: number; end_line: number }));
+        case 'code_map':
+          return ok(await CodeMapTool.run(args as { path: string }));
+        case 'git_diff':
+          return ok(await GitDiffTool.run(args as { path?: string }));
+        case 'clear_context':
+          return ok(await ClearContextTool.run(args as { reason?: string }, agent));
+        case 'conductor_create_track':
+          return ok(await ConductorCreateTrackTool.run(args as { title: string }));
+        case 'conductor_update_plan':
+          return ok(await ConductorUpdatePlanTool.run(args as { taskName: string; status: 'todo' | 'in_progress' | 'done' }));
+        case 'conductor_archive_track':
+          return ok(await ConductorArchiveTrackTool.run(args as { reason?: string }));
+        case 'conductor_validate_plan':
+          return ok(await ConductorValidatePlanTool.run(args as { confirmation: boolean }));
+        default:
+          return err(new ImaraError(ErrorCategory.UNKNOWN, 'TOOL_UNKNOWN', `Tool inconnu: ${name}`));
+      }
+    } catch (reason) {
+      return err(fromUnknown(reason));
     }
   }
-}
 
+  private static guardConductor(name: string): Result<void, ImaraError> {
+    const dangerous = new Set(['write_file', 'append_file', 'replace_in_file', 'run_command']);
+    const track = TrackManager.getActive();
+    if (track && !track.validated && dangerous.has(name)) {
+      return err(new ImaraError(ErrorCategory.CONDUCTOR, 'TRACK_NOT_VALIDATED', `BARRIÈRE CONDUCTOR : "${name}" bloqué — plan du track non validé.`));
+    }
+    return ok(undefined);
+  }
+}

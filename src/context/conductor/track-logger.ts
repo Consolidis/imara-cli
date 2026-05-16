@@ -10,7 +10,7 @@ export class TrackLogger {
    * Appends a tool call entry to the active track's log.md.
    * Called automatically by agent.ts after each tool execution.
    */
-  static log(toolName: string, args: any, result: string | null, durationMs: number, error?: string): void {
+  static log(toolName: string, args: Record<string, unknown>, result: string | null, durationMs: number, error?: string): void {
     const track = TrackManager.getActive();
     if (!track) return; // No active track — silent no-op
 
@@ -42,18 +42,19 @@ export class TrackLogger {
   }
 }
 
-function buildLabel(toolName: string, args: any): string {
-  const p = args?.path || args?.file_path || '';
-  const q = args?.query || args?.pattern || args?.command || '';
+function buildLabel(toolName: string, args: Record<string, unknown>): string {
+  const p = String(args?.path || args?.file_path || args?.filepath || '');
+  const q = String(args?.query || args?.pattern || args?.command || args?.search || '');
+  const paths = args?.paths as string[] | undefined;
   switch (toolName) {
     case 'read_file':          return p;
     case 'write_file':         return p;
     case 'append_file':        return p;
     case 'list_directory':     return p || 'racine';
-    case 'run_command':        return String(q).slice(0, 60);
-    case 'search_files':       return `"${String(q).slice(0, 40)}"`;
-    case 'read_multiple_files':return `${(args?.paths || []).length} fichier(s)`;
-    case 'web_search':         return `"${String(q).slice(0, 50)}"`;
+    case 'run_command':        return q.slice(0, 60);
+    case 'search_files':       return `"${q.slice(0, 40)}"`;
+    case 'read_multiple_files':return `${(paths || []).length} fichier(s)`;
+    case 'web_search':         return `"${q.slice(0, 50)}"`;
     default:                   return JSON.stringify(args).slice(0, 60);
   }
 }

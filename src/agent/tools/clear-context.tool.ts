@@ -1,4 +1,4 @@
-import { ToolDefinition } from '../agent.types';
+import { ToolDefinition, Message, AgentProxy } from '../agent.types';
 
 export class ClearContextTool {
   static definition: ToolDefinition = {
@@ -12,22 +12,18 @@ export class ClearContextTool {
     }
   };
 
-  static async run(args: { reason?: string }, agent?: any) {
-    if (!agent) {
-      throw new Error('Erreur interne: L\'instance de l\'agent est manquante.');
-    }
+  static async run(args: { reason?: string }, agent?: AgentProxy): Promise<string> {
+    if (!agent) { throw new Error('Erreur interne: L\'instance agent est manquante.'); }
 
-    // Capture the first user message (the main task) before clearing
     const messages = agent.getMessages();
-    const systemPrompt = messages.find((m: any) => m.role === 'system');
-    const firstUserMsg = messages.find((m: any) => m.role === 'user');
+    const systemPrompt = messages.find((m: Message) => m.role === 'system');
+    const firstUserMsg = messages.find((m: Message) => m.role === 'user');
 
-    const newHistory = [];
+    const newHistory: Message[] = [];
     if (systemPrompt) newHistory.push(systemPrompt);
     if (firstUserMsg) newHistory.push(firstUserMsg);
 
     agent.setMessages(newHistory);
-
-    return `Historique vidé avec succès. Raison: ${args.reason || 'Optimisation des tokens'}. L'agent a maintenant un contexte frais tout en gardant sa mission principale.`;
+    return `Historique vidé avec succès. Raison: ${args.reason || 'Optimisation des tokens'}.`;
   }
 }

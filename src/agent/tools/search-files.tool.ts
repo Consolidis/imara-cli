@@ -18,7 +18,7 @@ export class SearchFilesTool {
     }
   };
 
-  static async run(args: { pattern: string, filePattern?: string }) {
+  static async run(args: { pattern: string, filePattern?: string }): Promise<string> {
     const globPattern = args.filePattern || '**/*';
     const files = await fg(globPattern, {
       cwd: process.cwd(),

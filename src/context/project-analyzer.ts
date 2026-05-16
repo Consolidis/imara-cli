@@ -4,32 +4,33 @@ import { execSync } from 'child_process';
 import fg from 'fast-glob';
 
 export class ProjectAnalyzer {
-  static async analyze() {
+  static async analyze(): Promise<{ name: string; type: string; structure: string; recentCommits: string; gitStatus: string; scripts: Record<string, unknown>; dependencies: Record<string, unknown>; conductor: { active: boolean } }> {
     const packageDetails = this.getPackageDetails();
-    // Project name: pkg.name > directory name
-    const projectName = packageDetails?.name || path.basename(process.cwd());
+    const projectName = String(packageDetails?.name || path.basename(process.cwd()));
     const projectInfo = {
       name: projectName,
       type: this.detectProjectType(packageDetails),
       structure: await this.getProjectStructure(),
       recentCommits: this.getRecentCommits(),
       gitStatus: this.getGitStatus(),
-      scripts: packageDetails?.scripts || {},
-      dependencies: packageDetails?.dependencies || {},
+      scripts: (packageDetails?.scripts as Record<string, unknown> | undefined) || {},
+      dependencies: (packageDetails?.dependencies as Record<string, unknown> | undefined) || {},
       conductor: {
-        active: fs.existsSync(require('./conductor/track-manager').TrackManager.getConductorDir())
+        active: fs.existsSync(path.join(process.cwd(), '.imara', 'conductor'))
       }
     };
 
     return projectInfo;
   }
 
-  private static detectProjectType(pkg: any): string {
+  private static detectProjectType(pkg: Record<string, unknown> | null): string {
     if (pkg) {
-      if (pkg.dependencies?.next) return `Next.js (${pkg.dependencies.next})`;
-      if (pkg.dependencies?.['@nestjs/core']) return `NestJS (${pkg.dependencies['@nestjs/core']})`;
-      if (pkg.devDependencies?.vite) return 'Vite';
-      if (pkg.dependencies?.react) return 'React';
+      const deps = pkg.dependencies as Record<string, string> | undefined;
+      const devDeps = pkg.devDependencies as Record<string, string> | undefined;
+      if (deps?.next) return `Next.js (${deps.next})`;
+      if (deps?.['@nestjs/core']) return `NestJS (${deps['@nestjs/core']})`;
+      if (devDeps?.vite) return 'Vite';
+      if (deps?.react) return 'React';
       return 'Node.js';
     }
     if (fs.existsSync(path.join(process.cwd(), 'requirements.txt'))) return 'Python';
@@ -38,18 +39,21 @@ export class ProjectAnalyzer {
     return 'Inconnu';
   }
 
-  private static getPackageDetails(): any {
+  private static getPackageDetails(): Record<string, unknown> | null {
     const pkgPath = path.join(process.cwd(), 'package.json');
     if (!fs.existsSync(pkgPath)) return null;
     try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as Record<string, unknown>;
+      const deps = (pkg.dependencies as Record<string, string> | undefined) || {};
+      const devDeps = (pkg.devDependencies as Record<string, string> | undefined) || {};
+      const scripts = (pkg.scripts as Record<string, string> | undefined) || {};
       return {
         name: pkg.name || null,
         description: pkg.description || null,
-        scripts: pkg.scripts ? Object.keys(pkg.scripts).slice(0, 10).reduce((acc: any, k) => { acc[k] = pkg.scripts[k]; return acc; }, {}) : {},
+        scripts: Object.fromEntries(Object.entries(scripts).slice(0, 10)),
         dependencies: {
-          ...Object.keys(pkg.dependencies || {}).slice(0, 10).reduce((acc: any, k) => { acc[k] = pkg.dependencies[k]; return acc; }, {}),
-          ...Object.keys(pkg.devDependencies || {}).slice(0, 5).reduce((acc: any, k) => { acc[k] = pkg.devDependencies[k]; return acc; }, {})
+          ...Object.fromEntries(Object.entries(deps).slice(0, 10)),
+          ...Object.fromEntries(Object.entries(devDeps).slice(0, 5)),
         }
       };
     } catch {
@@ -69,26 +73,28 @@ export class ProjectAnalyzer {
 
       if (entries.length === 0) return 'Répertoire vide';
 
-      // Simple tree builder
-      const tree: any = {};
+      interface TreeNode { [key: string]: TreeNode | null; }
+      const tree: TreeNode = {};
       entries.sort().forEach(entry => {
         const parts = entry.split('/');
-        let current = tree;
+        let current: TreeNode = tree;
         parts.forEach((part, index) => {
           if (!part) return;
           if (!current[part]) current[part] = index === parts.length - 1 && !entry.endsWith('/') ? null : {};
-          current = current[part];
+          current = current[part] as TreeNode;
         });
       });
 
-      const renderTree = (node: any, prefix = ''): string => {
+      const renderTree = (node: TreeNode | null, prefix = ''): string => {
+        if (!node) return '';
         const keys = Object.keys(node);
         return keys.map((key, index) => {
           const isLast = index === keys.length - 1;
           const connector = isLast ? '└── ' : '├── ';
           const childPrefix = isLast ? '    ' : '│   ';
           const line = `${prefix}${connector}${key}`;
-          const children = node[key] ? renderTree(node[key], `${prefix}${childPrefix}`) : '';
+          const childNode = node[key];
+          const children = childNode ? renderTree(childNode, `${prefix}${childPrefix}`) : '';
           return line + (children ? '\n' + children : '');
         }).join('\n');
       };

@@ -12,12 +12,11 @@ export function showResponse(content: string) {
   uiShowResponse(content);
 }
 
-export function showToolCall(name: string, args: any) {
+export function showToolCall(name: string, args: Record<string, unknown>) {
   uiShowToolCall(name, args);
 }
 
-export function showToolResult(name: string, result: any, duration?: number) {
-  // Pass the result to showToolCall which handles the \r overwrite
+export function showToolResult(name: string, result: unknown, duration?: number) {
   uiShowToolCall(name, {}, duration);
 }
 

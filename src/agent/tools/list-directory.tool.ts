@@ -16,7 +16,7 @@ export class ListDirectoryTool {
     }
   };
 
-  static async run(args: { path?: string, recursive?: boolean }) {
+  static async run(args: { path?: string, recursive?: boolean }): Promise<string> {
     const relativePath = args.path || '.';
     const fullPath = path.resolve(process.cwd(), relativePath);
 

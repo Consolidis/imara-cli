@@ -7,7 +7,14 @@ import { SessionManager } from '../../context/session-manager';
 import { theme } from '../../ui/theme';
 import { renderWelcome } from '../../ui/screens/welcome';
 
-export async function chatCommand(options: any, initialPrompt?: string) {
+interface ChatOptions {
+  model?: string;
+  yes?: boolean;
+  resume?: string;
+  execute?: boolean;
+}
+
+export async function chatCommand(options: ChatOptions, initialPrompt?: string) {
   const user = await requireAuth();
   const projectInfo = await ProjectAnalyzer.analyze();
   
@@ -35,8 +42,9 @@ export async function chatCommand(options: any, initialPrompt?: string) {
         agent.setMessages(messages);
         console.log(chalk.dim(`\n(Session "${options.resume}" reprise avec ${messages.length} messages)\n`));
       }
-    } catch (e: any) {
-      console.error(chalk.red(`\nErreur reprise session: ${e.message}`));
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error(chalk.red(`\nErreur reprise session: ${errMsg}`));
     }
   }
 
@@ -216,8 +224,9 @@ export async function chatCommand(options: any, initialPrompt?: string) {
     isProcessing = true;
     try {
       await agent.run(input);
-    } catch (error: any) {
-      console.error(chalk.red(`\nErreur: ${error.message}`));
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error(chalk.red(`\nErreur: ${errMsg}`));
     } finally {
       isProcessing = false;
     }
@@ -232,8 +241,9 @@ export async function chatCommand(options: any, initialPrompt?: string) {
       await new Promise(resolve => setTimeout(resolve, 500));
       console.log(chalk.hex(theme.primary)(`› ${initialPrompt}`));
       await agent.run(initialPrompt);
-    } catch (error: any) {
-      console.error(chalk.red(`\nErreur initialisation: ${error.message}`));
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error(chalk.red(`\nErreur initialisation: ${errMsg}`));
     } finally {
       isProcessing = false;
       rl.prompt();

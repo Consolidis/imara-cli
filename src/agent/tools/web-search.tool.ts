@@ -13,7 +13,7 @@ export class WebSearchTool {
     }
   };
 
-  static async run(args: { query: string }) {
+  static async run(args: { query: string }): Promise<string> {
     // This would typically call a backend endpoint that has search capabilities
     return `Recherche web pour: "${args.query}". (Note: La recherche web est actuellement simulée via le client API)`;
   }
