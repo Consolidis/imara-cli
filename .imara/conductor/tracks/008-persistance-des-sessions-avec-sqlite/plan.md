@@ -18,10 +18,10 @@ Ce plan est la source de vérité unique pour la mise en œuvre de la persistanc
 ---
 
 ## 🟢 PHASE 2 — INTÉGRATION DU NOYAU & RÉSILIENCE
-- [ ] Connecter le provider SQLite au gestionnaire de sessions [session-manager.ts](file:///c:/Users/tiffa/Documents/App/IMARA_AI/imara-cli/src/context/session-manager.ts).
-- [ ] Adapter [context-window.ts](file:///c:/Users/tiffa/Documents/App/IMARA_AI/imara-cli/src/context/context-window.ts) pour lire et écrire l'état de la fenêtre contextuelle de l'agent en base SQLite.
-- [ ] Ajouter l'option de configuration globale `persistHistory` (boolean, par défaut `true`) dans `src/config/config.ts`.
-- [ ] Mettre en œuvre le **Graceful Degradation** : si l'ouverture de la base de données échoue (ex: verrouillage de fichier), basculer proprement sur un mode mémoire non-persistant avec un avertissement de diagnostic non-bloquant pour l'utilisateur.
+- [x] Connecter le provider SQLite au gestionnaire de sessions [session-manager.ts](file:///c:/Users/tiffa/Documents/App/IMARA_AI/imara-cli/src/context/session-manager.ts).
+- [x] Adapter [context-window.ts](file:///c:/Users/tiffa/Documents/App/IMARA_AI/imara-cli/src/context/context-window.ts) pour lire et écrire l'état de la fenêtre contextuelle de l'agent en base SQLite.
+- [x] Ajouter l'option de configuration globale `persistHistory` (boolean, par défaut `true`) dans `src/config/config.ts`.
+- [x] Mettre en œuvre le **Graceful Degradation** : si l'ouverture de la base de données échoue (ex: verrouillage de fichier), basculer proprement sur un mode mémoire non-persistant avec un avertissement de diagnostic non-bloquant pour l'utilisateur.
 
 ---
 

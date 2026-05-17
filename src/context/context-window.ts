@@ -1,6 +1,7 @@
 import { Message } from '../agent/agent.types';
 import { countConversationTokens, countTokensBatch } from '../utils/token-counter';
 import { SessionSummary } from './session-summary';
+import { getStorage } from '../storage/index.js';
 
 export type ContextWindowState = 'ok' | 'warning' | 'critical' | 'compacted';
 
@@ -66,7 +67,7 @@ export class ContextWindow {
     return { state: 'ok', action: 'none' };
   }
 
-  compact(messages: Message[]): Message[] {
+  compact(messages: Message[], sessionId?: string): Message[] {
     if (messages.length <= MIN_PRESERVE_MESSAGES) return messages;
 
     const systemMessage = messages.find(m => m.role === 'system');
@@ -82,6 +83,27 @@ export class ContextWindow {
 
     // Resumer les messages intermediaires
     const summary = this.generateSummary(middleMessages);
+
+    // Sauvegarde SQLite du résumé de contexte
+    if (sessionId) {
+      const provider = getStorage();
+      if (provider) {
+        try {
+          const latest = provider.getLatestSummary(sessionId);
+          const nextVersion = (latest?.version ?? 0) + 1;
+          provider.saveSummary({
+            sessionId,
+            content: summary,
+            tokenCount: countConversationTokens([{ role: 'system', content: summary }]),
+            createdAt: Date.now(),
+            version: nextVersion
+          });
+        } catch {
+          // Fallback silencieux en cas d'erreur SQLite
+        }
+      }
+    }
+
     const summaryMessage: Message = {
       role: 'system',
       content: `RESUME DES ECHANGES PRECEDENTS : ${summary}`

@@ -1,0 +1,118 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { SessionManager } from '../context/session-manager';
+import { ContextWindow } from '../context/context-window';
+import { SQLiteStorageProvider } from '../storage/sqlite-provider.js';
+import { ConfigManager } from '../config/config-manager';
+import { getStorage, resetStorageState } from '../storage/index.js';
+
+// Mock getStorage to return a memory database for testing, using the exact .js extension
+vi.mock('../storage/index.js', async () => {
+  const actual = await vi.importActual<any>('../storage/index.js');
+  let testDb: SQLiteStorageProvider | null = null;
+  return {
+    ...actual,
+    getStorage: () => {
+      const config = ConfigManager.get();
+      if (!config.persistHistory) return null;
+      if (!testDb) {
+        testDb = new SQLiteStorageProvider(':memory:');
+        testDb.init();
+      }
+      return testDb;
+    },
+    resetStorageState: () => {
+      testDb = null;
+    }
+  };
+});
+
+describe('SQLite Storage Integration', () => {
+  beforeEach(() => {
+    resetStorageState();
+    ConfigManager.set({ persistHistory: true });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  describe('SessionManager SQLite Integration', () => {
+    it('persists and reloads messages successfully from SQLite', () => {
+      const sessionId = `test_session_${Date.now()}`;
+      
+      const sm1 = new SessionManager(sessionId);
+      sm1.addMessage({ role: 'user', content: 'Hi Imara' });
+      sm1.addMessage({ role: 'assistant', content: 'Hello developer' });
+      
+      sm1.save();
+
+      const db = getStorage();
+      expect(db).toBeDefined();
+      
+      const dbSession = db?.getSession(sessionId);
+      expect(dbSession).toBeDefined();
+      
+      const dbMessages = db?.getMessages(sessionId);
+      expect(dbMessages).toHaveLength(2);
+      expect(dbMessages?.[0].content).toBe('Hello developer');
+      expect(dbMessages?.[1].content).toBe('Hi Imara');
+
+      const sm2 = new SessionManager(sessionId);
+      const loadedMessages = sm2.getMessages();
+      expect(loadedMessages).toHaveLength(2);
+      expect(loadedMessages[0].content).toBe('Hi Imara');
+      expect(loadedMessages[1].content).toBe('Hello developer');
+    });
+
+    it('respects persistHistory configuration and bypasses SQLite when false', () => {
+      ConfigManager.set({ persistHistory: false });
+      
+      const sessionId = `test_session_no_sql_${Date.now()}`;
+      const sm = new SessionManager(sessionId);
+      sm.addMessage({ role: 'user', content: 'Non-persistent message' });
+      sm.save();
+
+      const db = getStorage();
+      expect(db).toBeNull();
+    });
+  });
+
+  describe('ContextWindow SQLite Compaction Integration', () => {
+    it('saves a compacted conversation summary successfully to SQLite', () => {
+      const sessionId = `test_compaction_${Date.now()}`;
+      
+      const db = getStorage();
+      db?.createSession({
+        id: sessionId,
+        name: 'Compaction Test',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        projectPath: process.cwd(),
+        isActive: true
+      });
+
+      const cw = new ContextWindow({
+        maxTokens: 100,
+        warningThreshold: 70,
+        compactThreshold: 85
+      });
+
+      const messages: any[] = [
+        { role: 'system', content: 'You are an assistant' },
+        { role: 'user', content: 'Explain quantum computing in one sentence.' },
+        { role: 'assistant', content: 'It uses quantum bits to perform calculations.' },
+        { role: 'user', content: 'Explain black holes.' },
+        { role: 'assistant', content: 'They are high density regions in space.' }
+      ];
+
+      const compacted = cw.compact(messages, sessionId);
+      
+      expect(compacted.some(m => m.content.includes('RESUME DES ECHANGES PRECEDENTS'))).toBe(true);
+
+      const latestSummary = db?.getLatestSummary(sessionId);
+      expect(latestSummary).toBeDefined();
+      expect(latestSummary?.content).toBeDefined();
+      expect(latestSummary?.version).toBe(1);
+    });
+  });
+});

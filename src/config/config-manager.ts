@@ -21,6 +21,7 @@ export interface ConfigSchema {
   tokenWarningThreshold: number;
   tokenCompactThreshold: number;
   onboardingDone: boolean;
+  persistHistory: boolean;
 }
 
 export const DEFAULT_CONFIG: ConfigSchema = {
@@ -41,6 +42,7 @@ export const DEFAULT_CONFIG: ConfigSchema = {
   tokenWarningThreshold: 0.7,
   tokenCompactThreshold: 0.85,
   onboardingDone: false,
+  persistHistory: true,
 };
 
 export class ConfigManager {

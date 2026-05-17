@@ -1,4 +1,7 @@
 import Database from 'better-sqlite3';
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import crypto from 'node:crypto';
 import type {
   StorageProvider,
   Message,
@@ -17,6 +20,9 @@ export class SQLiteStorageProvider implements StorageProvider {
 
   init(): void {
     if (this.db) return;
+    if (this.dbPath !== ':memory:') {
+      mkdirSync(dirname(this.dbPath), { recursive: true });
+    }
     this.db = new Database(this.dbPath);
     this.db.pragma('journal_mode = WAL');
     this.migrate();
@@ -42,7 +48,7 @@ export class SQLiteStorageProvider implements StorageProvider {
       CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         session_id TEXT NOT NULL,
-        role TEXT NOT NULL CHECK(role IN ('system','user','assistant')),
+        role TEXT NOT NULL CHECK(role IN ('system','user','assistant','tool')),
         content TEXT NOT NULL,
         timestamp INTEGER NOT NULL,
         token_count INTEGER DEFAULT 0,
@@ -89,9 +95,9 @@ export class SQLiteStorageProvider implements StorageProvider {
     this.db = null;
   }
 
-  createSession(session: Omit<Session, 'id'>): Session {
+  createSession(session: Omit<Session, 'id'> & { id?: string }): Session {
     if (!this.db) throw new Error('Database not initialized');
-    const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+    const id = session.id || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
     const stmt = this.db.prepare(
       'INSERT INTO sessions (id, name, created_at, updated_at, project_path, context_snapshot, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
@@ -104,7 +110,8 @@ export class SQLiteStorageProvider implements StorageProvider {
       session.contextSnapshot ? JSON.stringify(session.contextSnapshot) : null,
       session.isActive ? 1 : 0
     );
-    return { id, ...session };
+    const { id: _, ...rest } = session;
+    return { id, ...rest };
   }
 
   getSession(id: string): Session | undefined {

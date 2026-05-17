@@ -1,7 +1,7 @@
 export interface Message {
   id: number;
   sessionId: string;
-  role: 'system' | 'user' | 'assistant';
+  role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
   timestamp: number;
   tokenCount: number;
@@ -41,7 +41,7 @@ export interface StorageProvider {
   init(): void;
   close(): void;
 
-  createSession(session: Omit<Session, 'id'>): Session;
+  createSession(session: Omit<Session, 'id'> & { id?: string }): Session;
   getSession(id: string): Session | undefined;
   updateSession(session: Session): void;
   listSessions(): Session[];

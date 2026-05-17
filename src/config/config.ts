@@ -11,6 +11,7 @@ export interface ConfigSchema {
   verbose: boolean;
   theme: string;
   offline: boolean;
+  persistHistory: boolean;
 }
 
 const DEFAULTS: ConfigSchema = {
@@ -23,6 +24,7 @@ const DEFAULTS: ConfigSchema = {
   verbose: false,
   theme: 'dark',
   offline: false,
+  persistHistory: true,
 };
 
 export function loadConfig(): ConfigSchema {
