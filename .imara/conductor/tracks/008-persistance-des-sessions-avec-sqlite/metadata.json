@@ -1,8 +1,8 @@
 {
   "trackId": "008-persistance-des-sessions-avec-sqlite",
   "title": "Persistance des sessions avec SQLite",
-  "status": "planning",
+  "status": "in-progress",
   "createdAt": "2026-05-17T18:10:00Z",
-  "updatedAt": "2026-05-17T18:10:00Z",
-  "validated": false
+  "updatedAt": "2026-05-17T18:23:00Z",
+  "validated": true
 }

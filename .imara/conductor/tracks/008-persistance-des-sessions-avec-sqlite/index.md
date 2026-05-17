@@ -1,6 +1,6 @@
 # Track 008 — Persistance des sessions avec SQLite
 
-**Statut :** 🟡 En planification (Consolidé)
+**Statut :** 🟡 En cours (Consolidé)
 **Créé :** 2026-05-17
 **Auteur :** Antigravity & Imara Zuri
 

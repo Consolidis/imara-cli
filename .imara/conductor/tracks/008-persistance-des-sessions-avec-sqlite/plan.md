@@ -5,12 +5,12 @@ Ce plan est la source de vérité unique pour la mise en œuvre de la persistanc
 ---
 
 ## 🟢 PHASE 1 — FONDATIONS & SCHÉMAS SQL
-- [ ] Ajouter la dépendance `better-sqlite3` et ses types `@types/better-sqlite3` au `package.json` de la CLI.
-- [ ] Créer le provider de stockage `src/storage/sqlite-provider.ts` :
+- [x] Ajouter la dépendance `better-sqlite3` et ses types `@types/better-sqlite3` au `package.json` de la CLI.
+- [x] Créer le provider de stockage `src/storage/sqlite-provider.ts` :
   - Initialisation de la base de données dans `.imara/data/imara.db`.
   - Gestion automatique des migrations (versioning de schéma SQL).
-- [ ] Définir l'interface de stockage standard dans `src/types/storage.ts`.
-- [ ] Créer les tables SQL :
+- [x] Définir l'interface de stockage standard dans `src/types/storage.ts`.
+- [x] Créer les tables SQL :
   - `sessions` : `id` (UUID/Text), `title` (Text), `activeTrackId` (Text), `model` (Text), `createdAt` (Datetime), `updatedAt` (Datetime)
   - `messages` : `id` (UUID/Text), `sessionId` (Text), `role` (Text), `content` (Text), `promptTokens` (Integer), `completionTokens` (Integer), `costFcfa` (Real), `createdAt` (Datetime)
   - `context_summaries` : `id` (UUID/Text), `sessionId` (Text), `summaryText` (Text), `tokenCount` (Integer), `createdAt` (Datetime)
