@@ -1,7 +1,7 @@
 # Tracks Registry
 
 ## In Progress
-(None - tous les tracks sont completes ou archives.)
+- **008-persistance-des-sessions-avec-sqlite**: [~] 10% (Fusionné et consolidé avec 004, 009 et 010. Spécifications techniques et plan de route unifiés écrits. Prêt pour l'implémentation de better-sqlite3.)
 
 ## Backlog
 (None - tous les tracks sont completes ou archives.)
