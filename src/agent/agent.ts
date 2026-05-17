@@ -6,6 +6,8 @@ import { ContextBuilder } from '../context/context-builder';
 import { showResponse, showToolCall, showToolResult, showIntention, startToolCallSpinner, stopToolCallSpinner } from '../ui/renderer';
 import { confirmAction } from '../ui/confirm';
 import { TrackLogger } from '../context/conductor/track-logger';
+import { ContextWindow } from '../context/context-window';
+import { ConfigManager } from '../config';
 import ora from 'ora';
 import { getAutoConfirm } from '../utils/env';
 import chalk from 'chalk';
@@ -38,6 +40,8 @@ export class Agent {
   private maxIterations = 20;
   private totalTokensUsed = 0;
   private totalCostFcfa = 0;
+  private contextWindow: ContextWindow;
+  private cancelled = false;
 
   constructor(options: AgentOptions = {}) {
     this.options = {
@@ -48,6 +52,21 @@ export class Agent {
       contextDepth: options.contextDepth ?? 2,
     };
     if (getAutoConfirm()) this.options.yes = true;
+
+    const cfg = ConfigManager.get();
+    this.contextWindow = new ContextWindow({
+      maxTokens: this.options.maxTokens,
+      warningThreshold: cfg.tokenWarningThreshold,
+      compactThreshold: cfg.tokenCompactThreshold,
+    });
+  }
+
+  cancel(): void {
+    this.cancelled = true;
+  }
+
+  resetCancellation(): void {
+    this.cancelled = false;
   }
 
   async run(prompt: string): Promise<void> {
@@ -65,6 +84,7 @@ export class Agent {
     }
 
     this.messages.push({ role: 'user', content: prompt });
+    this.resetCancellation();
     await this.runLoop();
   }
 
@@ -73,7 +93,25 @@ export class Agent {
     let iterations = 0;
 
     while (iterations < this.maxIterations) {
+      if (this.cancelled) {
+        throw new Error('Interruption : exécution annulée par l\'utilisateur.');
+      }
       iterations++;
+
+      // CHECK FENETRE DE CONTEXTE
+      const check = this.contextWindow.check(this.messages);
+      if (check.action === 'warn') {
+        process.stdout.write(chalk.hex(theme.warning)('\n⚠ Attention : le contexte approche de la limite (' + this.contextWindow.getStats(this.messages).totalTokens + ' tokens).\n'));
+      }
+      if (check.action === 'compact') {
+        const beforeCount = this.messages.length;
+        this.messages = this.contextWindow.compact(this.messages);
+        const afterCount = this.messages.length;
+        if (afterCount < beforeCount) {
+          process.stdout.write(chalk.hex(theme.warning)(`\n⚠ Contexte compresse : ${beforeCount - afterCount} messages resumes pour economiser des tokens.\n`));
+        }
+      }
+
       const spinnerText = iterations === 1
         ? chalk.hex(theme.muted)('Analyse de la demande...')
         : chalk.hex(theme.muted)('Synthèse des résultats...');
@@ -99,13 +137,18 @@ export class Agent {
         if (response.finishReason === 'tool_calls' && response.toolCalls.length > 0) {
           this.pushAssistantToolCalls(response);
           for (const toolCall of response.toolCalls) {
+            if (this.cancelled) {
+              throw new Error('Interruption : exécution annulée par l\'utilisateur.');
+            }
             const isSilent = silentTools.has(toolCall.name);
             if (!isSilent) showIntention(toolCall.name, toolCall.arguments);
             await this.handleToolCall(toolCall, isSilent);
           }
+          // MAJ STATUS BAR APRES TOOLS
           continue;
         }
 
+        // MAJ STATUS BAR A LA FIN
         break;
       } catch (error) {
         const imaraErr = fromUnknown(error);
@@ -116,8 +159,14 @@ export class Agent {
     }
 
     if (iterations >= this.maxIterations) {
-      console.warn('\nAttention: Nombre maximum d\'itérations atteint.');
+      console.warn('\nAttention: Nombre maximum d\'iterations atteint.');
     }
+  }
+
+  getContextStats() {
+    const stats = this.contextWindow.getStats(this.messages);
+    const percent = Math.round((stats.totalTokens / stats.maxTokens) * 100);
+    return { percent, state: stats.state };
   }
 
   private isAck(text: string): boolean {
@@ -140,6 +189,9 @@ export class Agent {
   }
 
   private async handleToolCall(toolCall: ParsedToolCall, isSilent: boolean): Promise<void> {
+    if (this.cancelled) {
+      throw new Error('Interruption : exécution annulée par l\'utilisateur.');
+    }
     const { id, name, arguments: args } = toolCall;
 
     if (!isSilent) startToolCallSpinner(name, args);

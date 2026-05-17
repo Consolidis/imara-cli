@@ -163,7 +163,26 @@ ${techStack}
     const activeFile = this.getActiveFile();
     if (!fs.existsSync(activeFile)) return null;
     try {
-      return JSON.parse(fs.readFileSync(activeFile, 'utf-8'));
+      const raw = JSON.parse(fs.readFileSync(activeFile, 'utf-8')) as unknown;
+      if (!raw || typeof raw !== 'object') {
+        this.clearActive();
+        return null;
+      }
+      const track = raw as { [K in keyof ActiveTrack]?: unknown };
+      if (
+        typeof track.id !== 'string' ||
+        typeof track.title !== 'string' ||
+        typeof track.dir !== 'string' ||
+        typeof track.validated !== 'boolean'
+      ) {
+        this.clearActive();
+        return null;
+      }
+      if (!fs.existsSync(track.dir)) {
+        this.clearActive();
+        return null;
+      }
+      return { id: track.id, title: track.title, dir: track.dir, validated: track.validated };
     } catch {
       return null;
     }

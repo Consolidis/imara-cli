@@ -50,4 +50,17 @@ describe('ConfigManager', () => {
     (ConfigManager as any)._cache = null;
     expect(ConfigManager.get().defaultModel).toBe('zuri');
   });
+
+  it('should detect first launch correctly', () => {
+    // 1. No config file exists -> isFirstLaunch is true
+    expect(ConfigManager.isFirstLaunch()).toBe(true);
+
+    // 2. Set onboardingDone = false -> isFirstLaunch remains true
+    ConfigManager.set({ onboardingDone: false });
+    expect(ConfigManager.isFirstLaunch()).toBe(true);
+
+    // 3. Set onboardingDone = true -> isFirstLaunch becomes false
+    ConfigManager.set({ onboardingDone: true });
+    expect(ConfigManager.isFirstLaunch()).toBe(false);
+  });
 });

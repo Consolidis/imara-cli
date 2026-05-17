@@ -1,6 +1,6 @@
 {
   "name": "@consolidis/imara-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Agent de codage IA pour le terminal — propulsé par Imara AI",
   "main": "dist/index.js",
   "bin": {
@@ -31,8 +31,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/Consolidis/imara-cli.git"
-  }, 
-  "bugs": { 
+  },
+  "bugs": {
     "url": "https://github.com/Consolidis/imara-cli/issues"
   },
   "homepage": "https://imara.consolidis.com/chat",
@@ -40,17 +40,20 @@
     "access": "public"
   },
   "dependencies": {
+    "better-sqlite3": "^12.10.0",
     "chalk": "^4.1.2",
     "commander": "^14.0.3",
     "diff": "^9.0.0",
     "dotenv": "^17.4.2",
     "enquirer": "^2.4.1",
     "fast-glob": "^3.3.3",
+    "js-tiktoken": "^1.0.21",
     "keytar": "^7.9.0",
     "ora": "^5.4.1",
     "update-notifier": "^5.1.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/diff": "^7.0.2",
     "@types/node": "^25.8.0",
     "@types/update-notifier": "^6.0.8",

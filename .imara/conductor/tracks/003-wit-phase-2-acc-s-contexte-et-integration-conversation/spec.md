@@ -1,4 +1,4 @@
-# Spécifications — Accompagner le développeur dans la conception et le codage de la base de code locale
+# Spécifications — WIT Phase 2: Accès contexte et integration conversation
 
 ## 1. Contexte & Enjeux
 (L'IA va définir le contexte ici)

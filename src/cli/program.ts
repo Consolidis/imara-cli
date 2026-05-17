@@ -7,29 +7,46 @@ import { whoamiCommand } from './commands/whoami.command';
 import { configCommand } from './commands/config.command';
 import { trackCommand } from './commands/track.command';
 import { initConductorCommand } from './commands/init-conductor.command';
+import { getVersion } from '../utils/version';
+import { ConfigManager } from '../config/config-manager';
 
 const program = new Command();
 
 program
   .name('imara')
   .description('Agent de codage IA pour le terminal — propulsé par Imara AI')
-  .version('1.0.0');
+  .version(getVersion());
 
 // Global Options
 program
   .option('-f, --file <path>', 'Ajouter un fichier au contexte')
-  .option('-m, --model <name>', 'Spécifier le modèle (flash, standard, zuri)', 'zuri')
+  .option('-m, --model <name>', 'Spécifier le modèle (flash, standard, zuri)')
   .option('-y, --yes', 'Confirmer automatiquement les actions dangereuses', false)
   .option('--no-execute', 'Ne pas exécuter les commandes proposées', false)
   .option('--max-tokens <number>', 'Limite de tokens par requête', '8192')
-  .option('--context-depth <number>', 'Profondeur de l\'analyse de projet', '2');
+  .option('--context-depth <number>', 'Profondeur de l\'analyse de projet', '2')
+  .option('--setup', 'Lancer la configuration interactif initiale', false);
 
 // Default action: one-shot prompt
 program
   .argument('[prompt]', 'Le prompt à envoyer à l\'IA')
-  .action((prompt, options) => {
+  .action(async (prompt, options) => {
+    if (options.setup) {
+      const { runSetupWizard } = await import('./wizard');
+      const { showTutorial } = await import('../ui/tutorial');
+      await runSetupWizard();
+      await showTutorial();
+      return;
+    }
     if (prompt) {
-      runCommand(prompt, options);
+      const config = ConfigManager.get();
+      const globalOpts = program.opts();
+      const mergedOptions = {
+        ...globalOpts,
+        model: options.model || globalOpts.model || config.defaultModel || 'zuri',
+        ...options
+      };
+      runCommand(prompt, mergedOptions);
     } else {
       program.help();
     }
@@ -40,7 +57,16 @@ program
   .command('chat')
   .description('Démarrer une session de chat interactive')
   .option('--resume <session-id>', 'Reprendre une session existante')
-  .action((options) => chatCommand(options));
+  .action((options) => {
+    const globalOpts = program.opts();
+    const config = ConfigManager.get();
+    const mergedOptions = {
+      ...globalOpts,
+      model: options.model || globalOpts.model || config.defaultModel || 'zuri',
+      ...options
+    };
+    chatCommand(mergedOptions);
+  });
 
 program
   .command('login')

@@ -8,6 +8,7 @@
 - 🏗️ **Méthodologie Conductor** : Workflow intégré (Inquiry, Planning, Approval, Execution).
 - 🛡️ **Guardrails de Sécurité** : L'IA ne code qu'après votre validation du plan.
 - 📂 **Analyse de Contexte** : Compréhension automatique de l'arborescence et de la stack technique.
+- 📊 **Gestion Intelligente du Contexte** : Comptage précis de tokens, fenêtre de contexte auto-compactée, résumés de session, statut temps réel.
 - ⚡ **Performance** : Exécution optimisée pour la rapidité et la précision.
 
 ## 📦 Installation
