@@ -21,6 +21,11 @@ import { ConductorCreateTrackTool } from './conductor-create-track.tool';
 import { ConductorUpdatePlanTool } from './conductor-update-plan.tool';
 import { ConductorArchiveTrackTool } from './conductor-archive-track.tool';
 import { ConductorValidatePlanTool } from './conductor-validate-plan.tool';
+import { SmartReadTool } from './smart-read.tool';
+import { WorkspaceIndexTool } from './workspace-index.tool';
+import { BatchReplaceTool } from './batch-replace.tool';
+import { DiffPreviewTool } from './diff-preview.tool';
+import { ProjectSummaryTool } from './project-summary.tool';
 
 export const TOOLS_DEFINITIONS: ToolDefinition[] = [
   ReadFileTool.definition, WriteFileTool.definition, AppendFileTool.definition,
@@ -29,7 +34,9 @@ export const TOOLS_DEFINITIONS: ToolDefinition[] = [
   ReadFileRangeTool.definition, InspectFileTool.definition, CodeMapTool.definition,
   GitDiffTool.definition, ClearContextTool.definition, ConductorCreateTrackTool.definition,
   ConductorUpdatePlanTool.definition, ConductorArchiveTrackTool.definition,
-  ConductorValidatePlanTool.definition
+  ConductorValidatePlanTool.definition, SmartReadTool.definition,
+  WorkspaceIndexTool.definition, BatchReplaceTool.definition,
+  DiffPreviewTool.definition, ProjectSummaryTool.definition
 ];
 
 export class ToolExecutor {
@@ -75,6 +82,16 @@ export class ToolExecutor {
           return ok(await ConductorArchiveTrackTool.run(args as { reason?: string }));
         case 'conductor_validate_plan':
           return ok(await ConductorValidatePlanTool.run(args as { confirmation: boolean }));
+        case 'smart_read':
+          return ok(await SmartReadTool.run(args as { path: string; mode?: 'outline' | 'summary' }));
+        case 'workspace_index':
+          return ok(await WorkspaceIndexTool.run(args as { query: string; symbolOnly?: boolean }));
+        case 'batch_replace':
+          return ok(await BatchReplaceTool.run(args as { path: string; replacements: Array<{ old_text: string; new_text: string }>; allowMultiple?: boolean }));
+        case 'diff_preview':
+          return ok(await DiffPreviewTool.run(args as { path: string; proposed_content: string }));
+        case 'project_summary':
+          return ok(await ProjectSummaryTool.run(args as { forceRefresh?: boolean }));
         default:
           return err(new ImaraError(ErrorCategory.UNKNOWN, 'TOOL_UNKNOWN', `Tool inconnu: ${name}`));
       }
@@ -84,7 +101,7 @@ export class ToolExecutor {
   }
 
   private static guardConductor(name: string, args?: ToolArguments): Result<void, ImaraError> {
-    const dangerous = new Set(['write_file', 'append_file', 'replace_in_file', 'run_command']);
+    const dangerous = new Set(['write_file', 'append_file', 'replace_in_file', 'run_command', 'batch_replace']);
     const track = TrackManager.getActive();
 
     // Exemption : meta-fichiers Conductor (spec, plan, log du track actif)

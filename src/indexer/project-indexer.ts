@@ -65,14 +65,14 @@ export class ProjectIndexer {
     // update inverted index
     for (const sym of symbols) {
       const term = sym.name.toLowerCase();
-      if (!this.inverted[term]) this.inverted[term] = [];
+      if (!Array.isArray(this.inverted[term])) this.inverted[term] = [];
       this.inverted[term].push({ path: relPath, line: sym.line, symbol: sym.name });
     }
     // index words for full-text
     const words = content.split(/\W+/).filter(w => w.length > 2);
     const uniqueWords = new Set(words.map(w => w.toLowerCase()));
     for (const word of uniqueWords) {
-      if (!this.inverted[word]) this.inverted[word] = [];
+      if (!Array.isArray(this.inverted[word])) this.inverted[word] = [];
       if (!this.inverted[word].some(e => e.path === relPath)) {
         this.inverted[word].push({ path: relPath, line: 1 });
       }
@@ -108,24 +108,66 @@ export class ProjectIndexer {
     return 'other';
   }
 
-  search(query: string): SearchResult[] {
+  search(query: string, symbolOnly = false): SearchResult[] {
     const term = query.toLowerCase();
-    const hits = this.inverted[term] || [];
     const scores = new Map<string, SearchResult>();
-    for (const hit of hits) {
-      const key = `${hit.path}:${hit.line}`;
-      const existing = scores.get(key);
-      if (existing) {
-        existing.score += 1;
-      } else {
-        scores.set(key, {
-          path: hit.path,
-          line: hit.line,
-          symbol: hit.symbol,
-          score: 1,
-        });
+
+    for (const [relPath, doc] of this.docs.entries()) {
+      // 1. Search symbols
+      for (const sym of doc.symbols) {
+        const symNameLower = sym.name.toLowerCase();
+        if (symNameLower.includes(term)) {
+          const key = `${relPath}:${sym.line}:${sym.name}`;
+          let score = 10;
+          if (symNameLower === term) score = 100;
+          else if (symNameLower.startsWith(term)) score = 50;
+
+          scores.set(key, {
+            path: relPath,
+            line: sym.line,
+            symbol: sym.name,
+            type: sym.type,
+            score
+          });
+        }
+      }
+
+      // 2. Search file path (if not symbolOnly)
+      if (!symbolOnly) {
+        const pathLower = relPath.toLowerCase();
+        if (pathLower.includes(term)) {
+          const key = `${relPath}:1`;
+          let score = 5;
+          if (pathLower === term) score = 80;
+          else if (pathLower.endsWith(term)) score = 40;
+
+          if (!scores.has(key)) {
+            scores.set(key, {
+              path: relPath,
+              line: 1,
+              score
+            });
+          }
+        }
       }
     }
+
+    // 3. Fallback/combine with inverted index word hits
+    if (!symbolOnly) {
+      const hits = this.inverted[term] || [];
+      for (const hit of hits) {
+        const key = hit.symbol ? `${hit.path}:${hit.line}:${hit.symbol}` : `${hit.path}:${hit.line}`;
+        if (!scores.has(key)) {
+          scores.set(key, {
+            path: hit.path,
+            line: hit.line,
+            symbol: hit.symbol,
+            score: 2
+          });
+        }
+      }
+    }
+
     return Array.from(scores.values()).sort((a, b) => b.score - a.score);
   }
 
