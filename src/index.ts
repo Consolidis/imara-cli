@@ -7,4 +7,4 @@ const pkg = require('../package.json');
 updateNotifier({ pkg }).notify();
 
 // Parse and run
-program.parse(process.argv);
+program.parseAsync(process.argv);

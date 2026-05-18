@@ -46,7 +46,7 @@ program
         model: options.model || globalOpts.model || config.defaultModel || 'zuri',
         ...options
       };
-      runCommand(prompt, mergedOptions);
+      await runCommand(prompt, mergedOptions);
     } else {
       program.help();
     }
@@ -57,7 +57,7 @@ program
   .command('chat')
   .description('Démarrer une session de chat interactive')
   .option('--resume <session-id>', 'Reprendre une session existante')
-  .action((options) => {
+  .action(async (options) => {
     const globalOpts = program.opts();
     const config = ConfigManager.get();
     const mergedOptions = {
@@ -65,24 +65,24 @@ program
       model: options.model || globalOpts.model || config.defaultModel || 'zuri',
       ...options
     };
-    chatCommand(mergedOptions);
+    await chatCommand(mergedOptions);
   });
 
 program
   .command('login')
   .description('Se connecter à Imara AI')
   .option('--key <api-key>', 'Clé API Imara')
-  .action((options) => loginCommand(options));
+  .action(async (options) => await loginCommand(options));
 
 program
   .command('logout')
   .description('Se déconnecter et supprimer la clé API')
-  .action(() => logoutCommand());
+  .action(async () => await logoutCommand());
 
 program
   .command('whoami')
   .description('Afficher les informations de l\'utilisateur connecté')
-  .action(() => whoamiCommand());
+  .action(async () => await whoamiCommand());
 
 program
   .command('config')
@@ -90,19 +90,19 @@ program
   .argument('<action>', 'Action (set, get, list, reset)')
   .argument('[key]', 'Clé de configuration')
   .argument('[value]', 'Valeur de configuration')
-  .action((action, key, value) => configCommand(action, key, value));
+  .action(async (action, key, value) => await configCommand(action, key, value));
 
 program
   .command('track')
   .description('Gérer le suivi de projet (Conductor intégré)')
   .argument('<action>', 'Action (init, new, status, list, done)')
   .argument('[arg]', 'Titre du track (pour `new`) ou ID partiel (pour `done`)')
-  .action((action, arg) => trackCommand(action, arg));
+  .action(async (action, arg) => await trackCommand(action, arg));
 
 program
   .command('init-conductor')
   .description('Initialiser la méthodologie Conductor dans le projet')
-  .action(() => initConductorCommand());
+  .action(async () => await initConductorCommand());
 
 export { program };
 

@@ -156,7 +156,7 @@ export async function trackCommand(action: string, arg?: string) {
       // Forward to chat command with initial prompt
       const { chatCommand } = require('./chat.command');
       const relDir = path.relative(process.cwd(), trackDir).replace(/\\/g, '/');
-      chatCommand({}, `Je souhaite implémenter le track "${target}". Analyse le projet (regarde dans ./${relDir} pour le plan et les specs, et dans le reste du projet pour le code) et propose un plan détaillé.`); 
+      await chatCommand({}, `Je souhaite implémenter le track "${target}". Analyse le projet (regarde dans ./${relDir} pour le plan et les specs, et dans le reste du projet pour le code) et propose un plan détaillé.`); 
       break;
     }
 
