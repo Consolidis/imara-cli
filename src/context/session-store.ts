@@ -1,4 +1,4 @@
-import { getStorage } from '../storage/index.js';
+import { getStorage } from '../storage/index';
 import { Message as StorageMessage, Session } from '../types/storage';
 import { Message as AgentMessage } from '../agent/agent.types';
 
@@ -91,7 +91,7 @@ export class SessionStore {
     const provider = getStorage();
     if (!provider) return [];
     const rows = provider.getMessages(sessionId, 10000);
-    return rows.map(r => this.toAgentMessage(r));
+    return rows.reverse().map(r => this.toAgentMessage(r));
   }
 
   deleteOldSessions(maxAgeDays: number): number {

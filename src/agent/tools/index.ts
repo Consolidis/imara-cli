@@ -2,6 +2,7 @@ import { ToolDefinition, ToolArguments, AgentProxy } from '../agent.types';
 import { Result, ok, err } from '../../types/result';
 import { ImaraError, fromUnknown, ErrorCategory } from '../../types/errors';
 import { TrackManager } from '../../context/conductor/track-manager';
+import * as path from 'path';
 import { ReadFileTool } from './read-file.tool';
 import { WriteFileTool } from './write-file.tool';
 import { AppendFileTool } from './append-file.tool';
@@ -85,7 +86,13 @@ export class ToolExecutor {
 
     // Exemption : meta-fichiers Conductor (spec, plan, log du track actif)
     const targetPath = typeof args?.path === 'string' ? args.path : '';
-    if (targetPath.startsWith('.imara/conductor/')) return ok(undefined);
+    if (targetPath) {
+      const absTarget = path.resolve(process.cwd(), targetPath);
+      const absConductor = path.resolve(TrackManager.getConductorDir());
+      if (absTarget.startsWith(absConductor)) {
+        return ok(undefined);
+      }
+    }
 
     if (track && !track.validated && dangerous.has(name)) {
       return err(new ImaraError(ErrorCategory.CONDUCTOR, 'TRACK_NOT_VALIDATED', `BARRIÈRE CONDUCTOR : "${name}" bloqué — plan du track non validé.`));

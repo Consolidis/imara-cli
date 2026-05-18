@@ -1,7 +1,7 @@
 import { Message } from '../agent/agent.types';
 import { countConversationTokens, countTokensBatch } from '../utils/token-counter';
 import { SessionSummary } from './session-summary';
-import { getStorage } from '../storage/index.js';
+import { getStorage } from '../storage/index';
 
 export type ContextWindowState = 'ok' | 'warning' | 'critical' | 'compacted';
 

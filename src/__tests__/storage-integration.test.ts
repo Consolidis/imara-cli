@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SessionManager } from '../context/session-manager';
 import { ContextWindow } from '../context/context-window';
-import { SQLiteStorageProvider } from '../storage/sqlite-provider.js';
+import { SQLiteStorageProvider } from '../storage/sqlite-provider';
 import { ConfigManager } from '../config/config-manager';
-import { getStorage, resetStorageState } from '../storage/index.js';
+import { getStorage, resetStorageState } from '../storage/index';
 
-// Mock getStorage to return a memory database for testing, using the exact .js extension
-vi.mock('../storage/index.js', async () => {
-  const actual = await vi.importActual<any>('../storage/index.js');
+// Mock getStorage to return a memory database for testing
+vi.mock('../storage/index', async () => {
+  const actual = await vi.importActual<any>('../storage/index');
   let testDb: SQLiteStorageProvider | null = null;
   return {
     ...actual,

@@ -8,7 +8,7 @@ import type {
   Session,
   Variable,
   Summary,
-} from '../types/storage.js';
+} from '../types/storage';
 
 export class SQLiteStorageProvider implements StorageProvider {
   private db: Database.Database | null = null;

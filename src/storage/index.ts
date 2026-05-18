@@ -1,7 +1,7 @@
 import { join } from 'path';
 import { homedir } from 'os';
-import { SQLiteStorageProvider } from './sqlite-provider.js';
-import { ConfigManager } from '../config/config-manager.js';
+import { SQLiteStorageProvider } from './sqlite-provider';
+import { ConfigManager } from '../config/config-manager';
 import chalk from 'chalk';
 
 let globalStorage: SQLiteStorageProvider | null = null;
@@ -44,6 +44,13 @@ export function getStorage(): SQLiteStorageProvider | null {
 }
 
 export function resetStorageState(): void {
+  if (globalStorage) {
+    try {
+      globalStorage.close();
+    } catch {
+      // Ignore gracefully
+    }
+  }
   globalStorage = null;
   storageInitialized = false;
   fallbackMode = false;

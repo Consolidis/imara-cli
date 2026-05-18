@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SessionManager } from '../context/session-manager';
-import { getStorage } from '../storage/index.js';
+import { getStorage } from '../storage/index';
 import { ConfigManager } from '../config/config-manager';
 
 // Ensure persistence is turned on for storage tests

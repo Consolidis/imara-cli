@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { Message } from '../agent/agent.types';
-import { getStorage } from '../storage/index.js';
+import { getStorage } from '../storage/index';
 
 const FLUSH_INTERVAL_MS = 2000;
 

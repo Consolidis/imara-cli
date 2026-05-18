@@ -37,4 +37,35 @@ describe('ToolExecutor', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.message.toLowerCase()).toContain('non trouvé');
   });
+
+  it('should block write_file outside Conductor dir but allow inside when track is active and unvalidated', async () => {
+    const { TrackManager } = await import('../context/conductor/track-manager');
+    const vi = (await import('vitest')).vi;
+    
+    // Mock active unvalidated track
+    vi.spyOn(TrackManager, 'getActive').mockReturnValue({
+      id: '099-test-track',
+      title: 'Test Track',
+      dir: 'custom-conductor/tracks/099-test-track',
+      validated: false
+    });
+    vi.spyOn(TrackManager, 'getConductorDir').mockReturnValue('custom-conductor');
+
+    // 1. Outside Conductor dir: should be blocked
+    const resultOutside = await ToolExecutor.execute('write_file', { path: 'src/index.ts', content: 'hello' });
+    expect(resultOutside.ok).toBe(false);
+    if (!resultOutside.ok) {
+      expect(resultOutside.error.message).toContain('BARRIÈRE CONDUCTOR');
+    }
+
+    // 2. Inside Conductor dir: should be allowed (bypasses guardrail, will proceed to execute and fail on path/directory existence since it is mocked)
+    const resultInside = await ToolExecutor.execute('write_file', { path: 'custom-conductor/plan.md', content: 'hello' });
+    if (!resultInside.ok) {
+      expect(resultInside.error.message).not.toContain('BARRIÈRE CONDUCTOR');
+    } else {
+      expect(resultInside.ok).toBe(true);
+    }
+    
+    vi.restoreAllMocks();
+  });
 });
