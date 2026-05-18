@@ -1,0 +1,1 @@
+Added fallback documentation inside imara-cli README.md describing the Cwd-relative fallback resolution of TrackManager when no parent Conductor is found.
