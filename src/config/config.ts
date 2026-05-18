@@ -16,11 +16,12 @@ export interface ConfigSchema {
 
 const DEFAULTS: ConfigSchema = {
   apiKey: '',
-  baseUrl: 'https://api.imara.consolidis.com',
+  // baseUrl: 'https://api.imara.consolidis.com',
+  baseUrl: 'http://localhost:3001', 
   model: 'imara-zuri',
   temperature: 0.7,
-  maxTokens: 4096,
-  contextWindow: 8192,
+  maxTokens: 16384, 
+  contextWindow: 32768,
   verbose: false,
   theme: 'dark',
   offline: false,
