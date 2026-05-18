@@ -115,4 +115,48 @@ describe('SQLite Storage Integration', () => {
       expect(latestSummary?.version).toBe(1);
     });
   });
+
+  describe('Project Workspace Segregation Integration', () => {
+    it('segregates sessions correctly by projectPath in listSessions', () => {
+      const db = getStorage();
+      expect(db).toBeDefined();
+
+      const sessionA_Id = `session_a_${Date.now()}`;
+      const sessionB_Id = `session_b_${Date.now()}`;
+
+      // Create session for Project A (current directory)
+      db?.createSession({
+        id: sessionA_Id,
+        name: 'Project A Session',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        projectPath: process.cwd(),
+        isActive: true
+      });
+
+      // Create session for Project B (another path)
+      db?.createSession({
+        id: sessionB_Id,
+        name: 'Project B Session',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        projectPath: 'C:\\Users\\test\\Documents\\ProjectB',
+        isActive: true
+      });
+
+      // Query sessions for Project A
+      const sessionsA = db?.listSessions(process.cwd()) || [];
+      expect(sessionsA.some(s => s.id === sessionA_Id)).toBe(true);
+      expect(sessionsA.some(s => s.id === sessionB_Id)).toBe(false);
+
+      // Query sessions for Project B
+      const sessionsB = db?.listSessions('C:\\Users\\test\\Documents\\ProjectB') || [];
+      expect(sessionsB.some(s => s.id === sessionA_Id)).toBe(false);
+      expect(sessionsB.some(s => s.id === sessionB_Id)).toBe(true);
+
+      // Clean up test sessions
+      db?.deleteSession(sessionA_Id);
+      db?.deleteSession(sessionB_Id);
+    });
+  });
 });

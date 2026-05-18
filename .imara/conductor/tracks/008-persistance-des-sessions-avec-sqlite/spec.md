@@ -126,6 +126,8 @@ Affiche une table textuelle soignée récapitulant les 10 dernières sessions :
 ### 5.3 Commande `/clear-history`
 Efface complètement toutes les sessions et tous les messages stockés après confirmation interactive de l'utilisateur (`y/N`).
 
-### 5.4 Auto-Resume & Garbage Collector
+### 5.4 Auto-Resume, Confinement de Projet & Garbage Collector
 *   **Auto-Resume** : Si la dernière session de chat a été quittée de manière inopinée (non clôturée) il y a moins de 24h, le chat invite l'utilisateur : *« Souhaitez-vous reprendre votre dernière session active ? (y/N) »*.
+*   **Confinement de Projet** : L'affichage historique (`/sessions`), le chargement (`/load <id>`) et l'**Auto-Resume** sont strictement filtrés par le répertoire de travail actuel (`process.cwd()`). Les sessions du projet A ne sont pas accessibles ou visibles depuis le projet B pour éviter tout mélange de contextes.
 *   **Garbage Collector** : Lors du lancement, un processus asynchrone élimine de la base de données toutes les sessions et messages dont le `updatedAt` est supérieur à 30 jours, optimisant ainsi l'espace disque.
+

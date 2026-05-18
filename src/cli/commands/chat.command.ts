@@ -11,8 +11,6 @@ import { showErrorPanel } from '../../ui/components/error-panel';
 import { TrackManager } from '../../context/conductor/track-manager';
 import { renderWelcome } from '../../ui/screens/welcome';
 import { ConfigManager } from '../../config/config-manager';
-import { runSetupWizard } from '../wizard';
-import { showTutorial } from '../../ui/tutorial';
 
 interface ChatOptions {
   model?: string;
@@ -23,6 +21,8 @@ interface ChatOptions {
 
 export async function chatCommand(options: ChatOptions, initialPrompt?: string) {
   if (ConfigManager.isFirstLaunch()) {
+    const { runSetupWizard } = await import('../../cli/wizard');
+    const { showTutorial } = await import('../../ui/tutorial');
     await runSetupWizard();
     await showTutorial();
   }
@@ -75,23 +75,33 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
   const store = new SessionStore();
   let currentSessionId: string | null = null;
 
-  function autoSaveSession() {
-    if (currentSessionId) {
-      store.saveMessages(currentSessionId, agent.getMessages());
+  // Trigger Garbage Collector in background asynchronously (purge >30 days old sessions)
+  setTimeout(() => {
+    try {
+      const deletedCount = store.deleteOldSessions(30);
+      if (deletedCount > 0 && ConfigManager.get().verbose) {
+        console.log(chalk.dim(`\n[GC] ${deletedCount} sessions inactives obsolètes (>30 jours) purgées.`));
+      }
+    } catch {
+      // Silent GC
     }
-  }
+  }, 1000);
 
   // Resume session if requested
   if (options.resume) {
     try {
       const session = store.findSessionByName(options.resume) || store.getSession(options.resume);
       if (session) {
-        const messages = store.loadMessages(session.id);
-        if (messages.length > 0) {
-          agent.setMessages(messages);
-          currentSessionId = session.id;
-          store.activateSession(session.id);
-          console.log(chalk.dim(`\n(Session "${session.name}" reprise avec ${messages.length} messages)\n`));
+        if (session.projectPath !== process.cwd()) {
+          console.log(chalk.hex(theme.warning)(`\n  ⚠ Impossible de charger cette session : elle appartient au projet situé dans "${session.projectPath}" et non au projet courant.\n`));
+        } else {
+          const messages = store.loadMessages(session.id);
+          if (messages.length > 0) {
+            agent.setMessages(messages);
+            currentSessionId = session.id;
+            store.activateSession(session.id);
+            console.log(chalk.dim(`\n(Session "${session.name}" reprise avec ${messages.length} messages)\n`));
+          }
         }
       } else {
         console.log(chalk.hex(theme.warning)(`\nSession "${options.resume}" introuvable.\n`));
@@ -101,16 +111,38 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
       console.error(chalk.red(`\nErreur reprise session: ${errMsg}`));
     }
   } else {
-    // Auto-resume derniere session active si elle existe
+    // Auto-resume derniere session active si elle existe (avec confirmation interactive et confinement de projet)
     try {
-      const sessions = store.listSessions();
-      const active = sessions.find(s => s.isActive);
-      if (active && active.projectPath === process.cwd()) {
-        const messages = store.loadMessages(active.id);
+      const sessions = store.listSessions(process.cwd());
+      const activeSession = sessions.find(s => s.isActive);
+      if (activeSession && activeSession.projectPath === process.cwd()) {
+        const messages = store.loadMessages(activeSession.id);
         if (messages.length > 0) {
-          agent.setMessages(messages);
-          currentSessionId = active.id;
-          console.log(chalk.dim(`\n(Session "${active.name}" reprise automatiquement : ${messages.length} messages)\n`));
+          rl.pause();
+          const resumeConfirm = await new Promise<boolean>(resolve => {
+            const tempRl = readline.createInterface({
+              input: process.stdin,
+              output: process.stdout
+            });
+            tempRl.question(
+              chalk.hex(theme.primary)(`  Souhaitez-vous reprendre votre dernière session active "${activeSession.name}" ? (y/N) : `),
+              (ans) => {
+                tempRl.close();
+                resolve(ans.trim().toLowerCase() === 'y');
+              }
+            );
+          });
+          rl.resume();
+          
+          if (resumeConfirm) {
+            agent.setMessages(messages);
+            currentSessionId = activeSession.id;
+            console.log(chalk.hex(theme.accent)(`\n  ✓ Session "${activeSession.name}" reprise avec succès (${messages.length} messages).\n`));
+          } else {
+            // Désactiver l'ancienne session pour ne pas reprompter à chaque fois
+            store.deactivateSession(activeSession.id);
+            console.log(chalk.dim('\n  (Démarrage d\'une nouvelle session vierge)\n'));
+          }
         }
       }
     } catch {
@@ -340,35 +372,103 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
     }
 
     if (input === '/sessions') {
-      const sessions = store.listSessions();
-      console.log(chalk.hex(theme.primary).bold('\n  SESSIONS DISPONIBLES :'));
+      const sessions = store.listSessions(process.cwd());
+      console.log(chalk.hex(theme.primary).bold('\n  🤖 SESSIONS HISTORIQUES (Dossier courant) :'));
       if (sessions.length === 0) {
-        console.log(chalk.hex(theme.muted)('    Aucune session enregistrée.'));
+        console.log(chalk.hex(theme.muted)('    Aucune session enregistrée pour ce projet.'));
       } else {
-        sessions.slice(0, 20).forEach(s => {
-          const active = s.isActive ? chalk.hex(theme.accent)('●') : chalk.hex(theme.muted)('○');
-          const date = new Date(s.updatedAt).toLocaleDateString('fr-FR');
-          console.log(`    ${active} ${chalk.hex(theme.text)(s.name)} ${chalk.hex(theme.muted)(date + ' · ' + s.projectPath)}`);
+        console.log(chalk.hex(theme.muted)(
+          '  ┌' + '─'.repeat(38) + '┬' + '─'.repeat(34) + '┬' + '─'.repeat(14) + '┬' + '─'.repeat(19) + '┐'
+        ));
+        console.log(chalk.hex(theme.muted)(
+          '  │ ' + chalk.bold('ID Session'.padEnd(36)) + ' │ ' + chalk.bold('Titre / Nom'.padEnd(32)) + ' │ ' + chalk.bold('Modèle'.padEnd(12)) + ' │ ' + chalk.bold('Date'.padEnd(17)) + ' │'
+        ));
+        console.log(chalk.hex(theme.muted)(
+          '  ├' + '─'.repeat(38) + '┼' + '─'.repeat(34) + '┼' + '─'.repeat(14) + '┼' + '─'.repeat(19) + '┤'
+        ));
+        sessions.slice(0, 10).forEach(s => {
+          const idStr = s.id.substring(0, 36).padEnd(36);
+          const nameStr = s.name.substring(0, 32).padEnd(32);
+          const modelStr = resolvedModel.substring(0, 12).padEnd(12);
+          const dateStr = new Date(s.updatedAt).toLocaleDateString('fr-FR', {
+            day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+          }).padEnd(17);
+          const isActiveColor = s.isActive ? chalk.hex(theme.accent) : chalk.hex(theme.text);
+          console.log(chalk.hex(theme.muted)(
+            `  │ ` + isActiveColor(idStr) + ` │ ` + chalk.hex(theme.text)(nameStr) + ` │ ` + chalk.hex(theme.accent)(modelStr) + ` │ ` + chalk.hex(theme.muted)(dateStr) + ` │`
+          ));
         });
+        console.log(chalk.hex(theme.muted)(
+          '  └' + '─'.repeat(38) + '┴' + '─'.repeat(34) + '┴' + '─'.repeat(14) + '┴' + '─'.repeat(19) + '┘'
+        ));
       }
-      console.log('');
+      console.log(chalk.hex(theme.primary)(`\n  👉 Tapez ${chalk.bold('/load <id|nom>')} pour reprendre une session.\n`));
       rl.prompt();
       return;
     }
 
     if (input.startsWith('/load ')) {
-      const nameOrId = input.split(' ')[1];
+      const nameOrId = input.replace('/load ', '').trim();
+      if (!nameOrId) {
+        console.log(chalk.hex(theme.warning)('\n  Veuillez spécifier l\'ID ou le nom de la session (ex: /load session_123).\n'));
+        rl.prompt();
+        return;
+      }
       const session = store.findSessionByName(nameOrId) || store.getSession(nameOrId);
       if (!session) {
         console.log(chalk.hex(theme.warning)(`\n  Session "${nameOrId}" introuvable.\n`));
         rl.prompt();
         return;
       }
+      if (session.projectPath !== process.cwd()) {
+        console.log(chalk.hex(theme.warning)(`\n  ⚠ Impossible de charger cette session : elle appartient au projet situé dans "${session.projectPath}" et non au projet courant.\n`));
+        rl.prompt();
+        return;
+      }
+      
+      // Désactiver toutes les autres sessions actives dans ce projet
+      store.listSessions(process.cwd()).forEach(s => {
+        if (s.id !== session.id && s.isActive) {
+          store.deactivateSession(s.id);
+        }
+      });
+
       const messages = store.loadMessages(session.id);
       agent.setMessages(messages);
       currentSessionId = session.id;
       store.activateSession(session.id);
-      console.log(chalk.hex(theme.accent)(`\n  Session "${session.name}" chargée (${messages.length} messages).\n`));
+      console.log(chalk.hex(theme.accent)(`\n  ✓ Session "${session.name}" rechargée avec succès (${messages.length} messages).\n`));
+      rl.prompt();
+      return;
+    }
+
+    if (input === '/clear-history') {
+      rl.pause();
+      console.log(chalk.hex(theme.warning)('\n  ⚠️  ATTENTION : Cette action supprimera DÉFINITIVEMENT toutes les sessions et historiques stockés pour ce projet.'));
+      
+      const confirm = await new Promise<boolean>(resolve => {
+        const tempRl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+        tempRl.question(chalk.bold('  Voulez-vous continuer ? (y/N) : '), (ans) => {
+          tempRl.close();
+          resolve(ans.trim().toLowerCase() === 'y');
+        });
+      });
+      rl.resume();
+
+      if (confirm) {
+        const sessions = store.listSessions(process.cwd());
+        sessions.forEach(s => {
+          store.deleteSession(s.id);
+        });
+        agent.clearHistory();
+        currentSessionId = null;
+        console.log(chalk.hex(theme.accent)('\n  ✓ Base de données nettoyée pour ce projet.\n'));
+      } else {
+        console.log(chalk.dim('\n  Action annulée.\n'));
+      }
       rl.prompt();
       return;
     }
@@ -402,6 +502,19 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
     isProcessing = true;
     try {
       await agent.run(input);
+
+      // Auto-save history after each successful interaction
+      if (!currentSessionId) {
+        const defaultName = `session_${new Date().toLocaleDateString('fr-FR').replace(/\//g, '-')}_${Date.now().toString().slice(-4)}`;
+        const session = store.createSession(defaultName, process.cwd());
+        if (session) {
+          currentSessionId = session.id;
+          store.activateSession(session.id);
+        }
+      }
+      if (currentSessionId) {
+        store.saveMessages(currentSessionId, agent.getMessages());
+      }
     } catch (error) {
       if (error instanceof Error) {
         showErrorPanel(error);
@@ -422,6 +535,19 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
       await new Promise(resolve => setTimeout(resolve, 500));
       console.log(chalk.hex(theme.primary)(`› ${initialPrompt}`));
       await agent.run(initialPrompt);
+
+      // Auto-save initial prompt interaction
+      if (!currentSessionId) {
+        const defaultName = `session_${new Date().toLocaleDateString('fr-FR').replace(/\//g, '-')}_${Date.now().toString().slice(-4)}`;
+        const session = store.createSession(defaultName, process.cwd());
+        if (session) {
+          currentSessionId = session.id;
+          store.activateSession(session.id);
+        }
+      }
+      if (currentSessionId) {
+        store.saveMessages(currentSessionId, agent.getMessages());
+      }
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       console.error(chalk.red(`\nErreur initialisation: ${errMsg}`));

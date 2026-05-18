@@ -1,26 +1,17 @@
-import * as path from 'path';
-import * as os from 'os';
-import { SQLiteStorageProvider } from '../storage/sqlite-provider';
+import { getStorage } from '../storage/index.js';
 import { Message as StorageMessage, Session } from '../types/storage';
 import { Message as AgentMessage } from '../agent/agent.types';
 
-const DB_PATH = path.join(os.homedir(), '.imara', 'imara.db');
-
 export class SessionStore {
-  private provider: SQLiteStorageProvider;
-
-  constructor(dbPath?: string) {
-    this.provider = new SQLiteStorageProvider(dbPath || DB_PATH);
-    this.provider.init();
-  }
-
   close(): void {
-    this.provider.close();
+    // Managed globally, no-op
   }
 
-  createSession(name: string, projectPath: string): Session {
+  createSession(name: string, projectPath: string): Session | undefined {
+    const provider = getStorage();
+    if (!provider) return undefined;
     const now = Date.now();
-    return this.provider.createSession({
+    return provider.createSession({
       name,
       createdAt: now,
       updatedAt: now,
@@ -30,36 +21,54 @@ export class SessionStore {
   }
 
   getSession(id: string): Session | undefined {
-    return this.provider.getSession(id);
+    const provider = getStorage();
+    if (!provider) return undefined;
+    return provider.getSession(id);
   }
 
   findSessionByName(name: string): Session | undefined {
-    const sessions = this.provider.listSessions();
+    const provider = getStorage();
+    if (!provider) return undefined;
+    const sessions = provider.listSessions();
     return sessions.find(s => s.name === name);
   }
 
-  listSessions(): Session[] {
-    return this.provider.listSessions();
+  listSessions(projectPath?: string): Session[] {
+    const provider = getStorage();
+    if (!provider) return [];
+    return provider.listSessions(projectPath);
   }
 
   activateSession(id: string): void {
-    const session = this.provider.getSession(id);
+    const provider = getStorage();
+    if (!provider) return;
+    const session = provider.getSession(id);
     if (!session) return;
     session.isActive = true;
     session.updatedAt = Date.now();
-    this.provider.updateSession(session);
+    provider.updateSession(session);
   }
 
   deactivateSession(id: string): void {
-    const session = this.provider.getSession(id);
+    const provider = getStorage();
+    if (!provider) return;
+    const session = provider.getSession(id);
     if (!session) return;
     session.isActive = false;
     session.updatedAt = Date.now();
-    this.provider.updateSession(session);
+    provider.updateSession(session);
+  }
+
+  deleteSession(id: string): void {
+    const provider = getStorage();
+    if (!provider) return;
+    provider.deleteSession(id);
   }
 
   saveMessages(sessionId: string, messages: AgentMessage[]): void {
-    this.provider.deleteMessages(sessionId);
+    const provider = getStorage();
+    if (!provider) return;
+    provider.deleteMessages(sessionId);
     for (const msg of messages) {
       const storageMsg: Omit<StorageMessage, 'id'> = {
         sessionId,
@@ -69,27 +78,31 @@ export class SessionStore {
         tokenCount: 0,
         metadata: this.buildMetadata(msg),
       };
-      this.provider.addMessage(storageMsg);
+      provider.addMessage(storageMsg);
     }
-    const session = this.provider.getSession(sessionId);
+    const session = provider.getSession(sessionId);
     if (session) {
       session.updatedAt = Date.now();
-      this.provider.updateSession(session);
+      provider.updateSession(session);
     }
   }
 
   loadMessages(sessionId: string): AgentMessage[] {
-    const rows = this.provider.getMessages(sessionId, 10000);
+    const provider = getStorage();
+    if (!provider) return [];
+    const rows = provider.getMessages(sessionId, 10000);
     return rows.map(r => this.toAgentMessage(r));
   }
 
   deleteOldSessions(maxAgeDays: number): number {
+    const provider = getStorage();
+    if (!provider) return 0;
     const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
-    const sessions = this.provider.listSessions();
+    const sessions = provider.listSessions();
     let count = 0;
     for (const s of sessions) {
       if (!s.isActive && s.updatedAt < cutoff) {
-        this.provider.deleteSession(s.id);
+        provider.deleteSession(s.id);
         count++;
       }
     }

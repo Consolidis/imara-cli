@@ -136,8 +136,12 @@ export class SQLiteStorageProvider implements StorageProvider {
     );
   }
 
-  listSessions(): Session[] {
+  listSessions(projectPath?: string): Session[] {
     if (!this.db) throw new Error('Database not initialized');
+    if (projectPath) {
+      const rows = this.db.prepare('SELECT * FROM sessions WHERE project_path = ? ORDER BY updated_at DESC').all(projectPath) as any[];
+      return rows.map(r => this.mapSessionRow(r));
+    }
     const rows = this.db.prepare('SELECT * FROM sessions ORDER BY updated_at DESC').all() as any[];
     return rows.map(r => this.mapSessionRow(r));
   }

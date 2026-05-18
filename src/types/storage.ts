@@ -44,7 +44,7 @@ export interface StorageProvider {
   createSession(session: Omit<Session, 'id'> & { id?: string }): Session;
   getSession(id: string): Session | undefined;
   updateSession(session: Session): void;
-  listSessions(): Session[];
+  listSessions(projectPath?: string): Session[];
   deleteSession(id: string): void;
 
   addMessage(message: Omit<Message, 'id'>): Message;

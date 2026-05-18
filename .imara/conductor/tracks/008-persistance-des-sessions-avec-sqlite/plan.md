@@ -33,6 +33,7 @@ Ce plan est la source de vérité unique pour la mise en œuvre de la persistanc
 - [ ] Implémenter le **Auto-Resume** au démarrage :
   - Au lancement de la CLI, chercher s'il existe une session active récente.
   - Proposer interactivement à l'utilisateur de la reprendre pour gagner du temps.
+- [ ] Filtrer toutes ces actions (liste `/sessions`, chargement `/load`, auto-resume) par le répertoire de projet courant (`process.cwd()`) pour confiner l'historique par espace de travail.
 - [ ] Activer le **Garbage Collector (GC) asynchrone** au démarrage : purger silencieusement les sessions et messages vieux de plus de 30 jours pour éviter que la base n'occupe de l'espace disque inutilement.
 
 ---
