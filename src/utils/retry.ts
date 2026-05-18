@@ -4,14 +4,16 @@ export interface RetryConfig {
   maxDelayMs?: number;
   retryableStatusCodes?: number[];
   onRetry?: (error: unknown, attempt: number, delayMs: number) => void;
+  maxTimeMs?: number; // Maximum elapsed time in milliseconds
 }
 
 export const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
-  maxRetries: 3,
+  maxRetries: 15,
   baseDelayMs: process.env.NODE_ENV === 'test' ? 0 : 1000,
-  maxDelayMs: process.env.NODE_ENV === 'test' ? 0 : 8000,
+  maxDelayMs: process.env.NODE_ENV === 'test' ? 0 : 15000,
   retryableStatusCodes: [408, 429, 500, 502, 503, 504],
   onRetry: () => {},
+  maxTimeMs: process.env.NODE_ENV === 'test' ? 0 : 90000, // 1min 30s limit
 };
 
 /**
@@ -96,6 +98,7 @@ export async function executeWithRetry<T>(
 ): Promise<T> {
   const finalConfig = { ...DEFAULT_RETRY_CONFIG, ...config };
   let lastError: unknown;
+  const startTime = Date.now();
 
   for (let attempt = 0; attempt <= finalConfig.maxRetries; attempt++) {
     try {
@@ -103,13 +106,28 @@ export async function executeWithRetry<T>(
     } catch (error) {
       lastError = error;
 
-      if (attempt === finalConfig.maxRetries || !isRetriableError(error, finalConfig)) {
+      const elapsedMs = Date.now() - startTime;
+      if (
+        attempt === finalConfig.maxRetries || 
+        !isRetriableError(error, finalConfig) || 
+        (finalConfig.maxTimeMs > 0 && elapsedMs >= finalConfig.maxTimeMs)
+      ) {
         throw error;
       }
 
       // Full Jitter: random(0, min(maxDelayMs, baseDelayMs * 2^attempt))
       const temp = Math.min(finalConfig.maxDelayMs, finalConfig.baseDelayMs * Math.pow(2, attempt));
-      const delayMs = Math.random() * temp;
+      let delayMs = Math.random() * temp;
+
+      if (finalConfig.maxTimeMs > 0) {
+        const remainingMs = finalConfig.maxTimeMs - elapsedMs;
+        if (remainingMs <= 0) {
+          throw error;
+        }
+        if (delayMs > remainingMs) {
+          delayMs = remainingMs;
+        }
+      }
 
       if (finalConfig.onRetry) {
         try {

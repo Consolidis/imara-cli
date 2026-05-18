@@ -172,14 +172,15 @@ export class ImaraClient {
 
           return data;
         }, {
-          maxRetries: process.env.NODE_ENV === 'test' ? 0 : 5,
+          maxRetries: process.env.NODE_ENV === 'test' ? 0 : 30,
           baseDelayMs: process.env.NODE_ENV === 'test' ? 0 : 2000,
           maxDelayMs: process.env.NODE_ENV === 'test' ? 0 : 15000,
+          maxTimeMs: process.env.NODE_ENV === 'test' ? 0 : 90000,
           onRetry: (error, attempt, delayMs) => {
             if (process.env.NODE_ENV === 'test') return;
             const sec = Math.ceil(delayMs / 1000);
             process.stdout.write(
-              chalk.hex('#ffcc00')(`\n  ⚠ [IMARA / API Pause] Connexion temporairement saturée. Pause de ${sec}s avant tentative ${attempt + 1}/5...\n`)
+              chalk.hex('#ffcc00')(`\n  ⚠ [IMARA / API Pause] Connexion temporairement saturée. Pause de ${sec}s avant tentative ${attempt + 1}...\n`)
             );
           }
         });
