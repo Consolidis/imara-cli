@@ -1,0 +1,1 @@
+Replaced raw process.stdin tool execution confirmation prompts with an elegant, interactive enquirer.Select dropdown. Added three selectable choices (Yes, No, Always) to prevent keystroke buffer leakage into standard chat inputs, and enabled persistent session-wide Auto-Confirm whenever 'Always' is selected.
