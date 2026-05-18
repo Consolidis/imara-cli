@@ -111,6 +111,10 @@ export class Agent {
       }
       iterations++;
 
+      if (iterations > 120) {
+        throw new Error("Nombre maximum d'itérations (120) dépassé. Arrêt de sécurité.");
+      }
+
       // CHECK FENETRE DE CONTEXTE
       const check = this.contextWindow.check(this.messages);
       if (check.action === 'warn') {
@@ -308,35 +312,7 @@ export class Agent {
     const { id, name, arguments: args } = toolCall;
     const argsStr = JSON.stringify(args);
 
-    // Track tool execution history for loop detection
-    const loopStatus = this.detectLoop(name, args);
-    if (loopStatus.isLoop) {
-      if (!isSilent) stopToolCallSpinner();
-      const answer = await promptLoopResolution(`Boucle potentielle détectée : ${loopStatus.reason}.`);
-      if (answer === 'pause') {
-        this.richToolCallHistory = [];
-        this.paused = true;
-        
-        process.stdout.write(
-          chalk.hex(theme.warning)(
-            `\n⏸ Exécution mise en pause par l'utilisateur. Historique conservé.\n` +
-            `  Vous pouvez inspecter l'état du projet, ou taper ${chalk.bold('continue')} pour reprendre.\n\n`
-          )
-        );
-        
-        this.pushToolResult(id, name, 'Exécution mise en pause par l\'utilisateur.');
-        if (!isSilent) showToolResult(name, 'Mis en pause');
-        return;
-      } else {
-        const loopWarning = `SYSTEM WARNING: You are currently repeating actions or files. Loop detected: ${loopStatus.reason}. CHANGE your strategy immediately! Do not repeat the same action or argument sequence. Focus on explaining the issue or finding a different technical path.`;
-        this.messages.push({ role: 'system', content: loopWarning });
-        process.stdout.write(
-          chalk.hex(theme.warning ?? '#ffcc00')(`\n  ⚠ [Détecteur de Boucle] Passage forcé par l'utilisateur. Stratégie corrigée en mémoire.\n`)
-        );
-      }
-    }
-
-    // Record the current tool call in rich history
+    // Record the current tool call in rich history silently
     this.richToolCallHistory.push({
       name,
       args,

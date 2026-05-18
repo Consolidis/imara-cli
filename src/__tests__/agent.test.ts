@@ -67,35 +67,17 @@ describe('Agent', () => {
     expect(agent.getSessionStats().tokens).toBe(30);
   });
 
-  it('should detect loop and pause', async () => {
-    const { promptLoopResolution } = await import('../ui/confirm');
-    vi.mocked(promptLoopResolution).mockResolvedValue('pause');
-
-    const mockChat = vi.fn()
-      .mockResolvedValueOnce({
-        content: '',
-        finishReason: 'tool_calls',
-        toolCalls: [{ id: '1', name: 'read_file', arguments: { path: 'test.txt' } }],
-        usage: { totalTokens: 10, costFcfa: 0.1 }
-      })
-      .mockResolvedValueOnce({
-        content: '',
-        finishReason: 'tool_calls',
-        toolCalls: [{ id: '2', name: 'read_file', arguments: { path: 'test.txt' } }],
-        usage: { totalTokens: 10, costFcfa: 0.1 }
-      })
-      .mockResolvedValueOnce({
-        content: '',
-        finishReason: 'tool_calls',
-        toolCalls: [{ id: '3', name: 'read_file', arguments: { path: 'test.txt' } }],
-        usage: { totalTokens: 10, costFcfa: 0.1 }
-      });
+  it('should throw an error when iterations exceed 120', async () => {
+    const mockChat = vi.fn().mockResolvedValue({
+      content: '',
+      finishReason: 'tool_calls',
+      toolCalls: [{ id: '1', name: 'read_file', arguments: { path: 'test.txt' } }],
+      usage: { totalTokens: 10, costFcfa: 0.1 }
+    });
     
     vi.mocked(ImaraClient).prototype.chat = mockChat;
 
     const agent = new Agent();
-    await agent.run('test loop');
-
-    expect(promptLoopResolution).toHaveBeenCalled();
+    await expect(agent.run('test max loop')).rejects.toThrow("Nombre maximum d'itérations (120) dépassé. Arrêt de sécurité.");
   });
 });
