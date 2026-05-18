@@ -1,0 +1,1 @@
+Implemented a robust, transparent Cloudflare 429 auto-retry mechanism with exponential backoff, full jitter, and interactive user-facing warnings. Added an advanced self-correcting Loop Detector that intercepts consecutive identical tool executions and injects a SYSTEM WARNING to adjust the LLM strategy on the fly.
