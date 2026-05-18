@@ -51,6 +51,8 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
       model: resolvedModel
     });
 
+    let isProcessing = false;
+
     // ESCAPE Keypress listener to cancel agent processing
     const keypressHandler = (str: string, key: any) => {
       if (isProcessing && key) {
@@ -171,8 +173,6 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
     } else {
       console.log('');
     }
-
-    let isProcessing = false;
 
     function printStatus() {
       const stats = agent.getSessionStats();
