@@ -26,22 +26,24 @@ Ce plan est la source de vérité unique pour la mise en œuvre de la persistanc
 ---
 
 ## 🟢 PHASE 3 — INTERFACE REPL, AUTO-RESUME & GC
-- [ ] Ajouter les commandes interactives au REPL d'IMARA :
+- [x] Ajouter les commandes interactives au REPL d'IMARA :
   - `/sessions` : Affiche un tableau formaté élégant récapitulant les sessions passées avec leur ID, titre, modèle actif et date.
   - `/load <id|nom>` : Restaure intégralement l'état historique de la session choisie et rafraîchit le contexte actif de l'agent.
-  - `/clear` ou `/clear-history` : Supprime toutes les données de la base SQLite de façon sécurisée.
-- [ ] Implémenter le **Auto-Resume** au démarrage :
+  - `/clear-history` : Supprime toutes les données de la base SQLite de façon sécurisée (avec confirmation interactive).
+- [x] Implémenter le **Auto-Resume** au démarrage :
   - Au lancement de la CLI, chercher s'il existe une session active récente.
   - Proposer interactivement à l'utilisateur de la reprendre pour gagner du temps.
-- [ ] Filtrer toutes ces actions (liste `/sessions`, chargement `/load`, auto-resume) par le répertoire de projet courant (`process.cwd()`) pour confiner l'historique par espace de travail.
-- [ ] Activer le **Garbage Collector (GC) asynchrone** au démarrage : purger silencieusement les sessions et messages vieux de plus de 30 jours pour éviter que la base n'occupe de l'espace disque inutilement.
+- [x] Filtrer toutes ces actions (liste `/sessions`, chargement `/load`, auto-resume) par le répertoire de projet courant (`process.cwd()`) pour confiner l'historique par espace de travail.
+- [x] Activer le **Garbage Collector (GC) asynchrone** au démarrage : purger silencieusement les sessions et messages vieux de plus de 30 jours pour éviter que la base n'occupe de l'espace disque inutilement.
 
 ---
 
 ## 🟢 PHASE 4 — QUALITÉ, TESTS & NETTOYAGE
-- [ ] Écrire la suite de tests unitaires et d'intégration :
+- [x] Écrire la suite de tests unitaires et d'intégration :
   - Validation du CRUD du provider SQLite (sessions et messages).
   - Validation du comportement et de la désactivation via `persistHistory = false`.
   - Validation du mode dégradé (Graceful degradation).
-- [ ] Supprimer tout le code historique de sauvegarde JSON temporaire ou d'anciennes structures de données héritées pour garder le noyau léger.
-- [ ] Mettre à jour la documentation globale dans `README.md`.
+- [x] Supprimer tout le code historique de sauvegarde JSON temporaire ou d'anciennes structures de données héritées pour garder le noyau léger.
+- [x] Mettre à jour la documentation globale dans `README.md`.
+
+[checkpoint: 27eb3033d9f7150d72c972cbb39c8916f5f1fcd1]
