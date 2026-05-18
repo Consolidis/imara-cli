@@ -63,4 +63,17 @@ describe('TrackManager (Conductor)', () => {
     fs.mkdirSync(backCond);
     expect(TrackManager.getConductorDir()).toBe(backCond);
   });
+
+  it('should dynamically climb upward to find conductor directory', () => {
+    const rootCond = path.join(testDir, 'backend', 'conductor');
+    fs.mkdirSync(rootCond, { recursive: true });
+
+    // Set process.cwd to nested sub-folder
+    const deepSubDir = path.join(testDir, 'nested', 'deep', 'app');
+    fs.mkdirSync(deepSubDir, { recursive: true });
+    vi.spyOn(process, 'cwd').mockReturnValue(deepSubDir);
+
+    TrackManager.resetCache();
+    expect(TrackManager.getConductorDir()).toBe(rootCond);
+  });
 });

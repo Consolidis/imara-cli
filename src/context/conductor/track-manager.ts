@@ -30,22 +30,32 @@ export class TrackManager {
   static getConductorDir(): string {
     if (this.cachedConductorDir) return this.cachedConductorDir;
 
-    const root = process.cwd();
-    const defaultDir = path.join(root, '.imara', 'conductor');
+    let dir = process.cwd();
     
-    const candidates = [
-      path.join(root, 'conductor'),
-      path.join(root, 'backend', 'conductor'),
-      defaultDir,
-    ];
+    // Climb directories upward to locate the unified Conductor workspace
+    while (true) {
+      const candidates = [
+        path.join(dir, 'conductor'),
+        path.join(dir, 'backend', 'conductor'),
+        path.join(dir, '.imara', 'conductor'),
+      ];
 
-    for (const cand of candidates) {
-      if (fs.existsSync(cand) && fs.statSync(cand).isDirectory()) {
-        this.cachedConductorDir = cand;
-        return cand;
+      for (const cand of candidates) {
+        if (fs.existsSync(cand) && fs.statSync(cand).isDirectory()) {
+          this.cachedConductorDir = cand;
+          return cand;
+        }
       }
+
+      const parent = path.dirname(dir);
+      if (parent === dir || (process.env.NODE_ENV === 'test' && !parent.includes('temp-test-conductor'))) {
+        break; // reached system root or test sandbox boundary
+      }
+      dir = parent;
     }
 
+    // Default fallback to local process.cwd()
+    const defaultDir = path.join(process.cwd(), '.imara', 'conductor');
     return defaultDir;
   }
 

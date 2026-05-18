@@ -30,6 +30,7 @@ ${projectInfo.recentCommits}
 
 STATUT GIT :
 ${projectInfo.gitStatus}
+${projectInfo.multiGitStatus ? `\nSTATUT MULTI-DÉPÔTS GIT (MONOREPO) :\n${projectInfo.multiGitStatus}\n` : ''}
 ${trackContext ? `\n${trackContext}\n` : ''}
 CONSIGNES CONDUCTOR (RÈGLE D'OR) :
 Tu travailles TOUJOURS selon le cycle suivant pour les tâches complexes :

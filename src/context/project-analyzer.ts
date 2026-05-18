@@ -4,7 +4,7 @@ import { execSync } from 'child_process';
 import fg from 'fast-glob';
 
 export class ProjectAnalyzer {
-  static async analyze(): Promise<{ name: string; type: string; structure: string; recentCommits: string; gitStatus: string; scripts: Record<string, unknown>; dependencies: Record<string, unknown>; conductor: { active: boolean } }> {
+  static async analyze(): Promise<{ name: string; type: string; structure: string; recentCommits: string; gitStatus: string; multiGitStatus?: string; scripts: Record<string, unknown>; dependencies: Record<string, unknown>; conductor: { active: boolean } }> {
     const packageDetails = this.getPackageDetails();
     const projectName = String(packageDetails?.name || path.basename(process.cwd()));
     const projectInfo = {
@@ -13,6 +13,7 @@ export class ProjectAnalyzer {
       structure: await this.getProjectStructure(),
       recentCommits: this.getRecentCommits(),
       gitStatus: this.getGitStatus(),
+      multiGitStatus: this.getMultiGitStatus(),
       scripts: (packageDetails?.scripts as Record<string, unknown> | undefined) || {},
       dependencies: (packageDetails?.dependencies as Record<string, unknown> | undefined) || {},
       conductor: {
@@ -118,6 +119,64 @@ export class ProjectAnalyzer {
       return execSync('git status --short', { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
     } catch {
       return 'Pas un dépôt git.';
+    }
+  }
+
+  private static getMultiGitStatus(): string {
+    const repos = this.discoverGitRepos();
+    if (repos.length <= 1) {
+      return ''; // No multi-repo setup or only one repo discovered
+    }
+    return repos.map(r => `  - Repository [${r.name}] (path: ${r.path})\n    Branch: ${r.branch}\n    Status:\n${r.status ? r.status.split('\n').map(l => `      ${l}`).join('\n') : '      Clean'}`).join('\n\n');
+  }
+
+  private static discoverGitRepos(): { path: string; name: string; branch: string; status: string }[] {
+    const repos: { path: string; name: string; branch: string; status: string }[] = [];
+    const root = process.cwd();
+
+    // 1. Check parent directory up to 3 levels (monorepo support)
+    let currentDir = root;
+    for (let i = 0; i < 3; i++) {
+      const gitDir = path.join(currentDir, '.git');
+      if (fs.existsSync(gitDir) && fs.statSync(gitDir).isDirectory()) {
+        const name = path.basename(currentDir);
+        const { branch, status } = this.getGitInfoForPath(currentDir);
+        repos.push({ path: currentDir, name: `${name} (Parent)`, branch, status });
+        break; 
+      }
+      const parent = path.dirname(currentDir);
+      if (parent === currentDir) break;
+      currentDir = parent;
+    }
+
+    // 2. Discover children Git repos under the parent/current workspace up to depth 2
+    try {
+      const items = fs.readdirSync(root);
+      for (const item of items) {
+        if (item === 'node_modules' || item === '.git') continue;
+        const fullPath = path.join(root, item);
+        if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) {
+          const subGit = path.join(fullPath, '.git');
+          if (fs.existsSync(subGit) && fs.statSync(subGit).isDirectory()) {
+            const { branch, status } = this.getGitInfoForPath(fullPath);
+            if (!repos.some(r => r.path === fullPath)) {
+              repos.push({ path: fullPath, name: item, branch, status });
+            }
+          }
+        }
+      }
+    } catch { /* ignore list failures */ }
+
+    return repos;
+  }
+
+  private static getGitInfoForPath(dirPath: string): { branch: string; status: string } {
+    try {
+      const branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: dirPath, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+      const status = execSync('git status --short', { cwd: dirPath, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+      return { branch, status };
+    } catch {
+      return { branch: 'unknown', status: '' };
     }
   }
 }
