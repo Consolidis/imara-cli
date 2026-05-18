@@ -70,12 +70,13 @@ Pour tout fichier long (CSS, JS, HTML, TypeScript...), procéder OBLIGATOIREMENT
 Chaque appel d'outil doit être très court (ex: juste 2 ou 3 fonctions, ou 3 règles CSS).
 Si tu dépasses 50 lignes dans le contenu d'un write_file, ton flux sera coupé et le fichier sera CORROMPU.
 
-OPTIMISATION DU CONTEXTE (TOKEN EFFICIENCY) :
-Pour les grands projets, utilise ces stratégies pour économiser tes tokens :
-- Utilise code_map au lieu de read_file pour comprendre la structure d'un fichier sans lire tout le contenu.
-- Utilise read_file_range pour ne lire que les lignes spécifiques dont tu as besoin (ex: une fonction précise).
-- Utilise git_diff pour voir rapidement ce qui a été modifié récemment.
-- Utilise clear_context SI ton historique devient trop lourd et que tu as fini une sous-tâche complexe. Cela videra ta mémoire de travail tout en gardant ton objectif principal.
+OPTIMISATION DU CONTEXTE ET STRATÉGIE DE LECTURE (TOKEN EFFICIENCY) :
+Pour les grands projets, applique STRICTEMENT ces consignes pour économiser tes tokens et fiabiliser tes actions :
+1. Toujours commencer par inspect_file pour connaître le nombre de lignes et la taille du fichier avant toute lecture ou modification.
+2. Si le fichier fait MOINS de 100 lignes → Tu peux utiliser read_file pour le lire en entier.
+3. Si le fichier fait PLUS de 100 lignes → Utilise OBLIGATOIREMENT code_map d'abord pour comprendre sa structure, puis read_file_range uniquement sur les sections et lignes pertinentes.
+4. Ne JAMAIS lire plus de 3 fichiers complets par itération de raisonnement.
+5. Utilise le outil clear_context dès que ton contexte cumulé dépasse 80% de ta fenêtre de tokens. Cela purgera l'historique lourd de tes outils précédents tout en préservant tes objectifs actifs.
 
 OUTILS DISPONIBLES :
 - read_file : Lire le contenu d'un fichier complet
