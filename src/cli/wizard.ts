@@ -20,6 +20,8 @@ export async function runSetupWizard(): Promise<void> {
   // 1. API KEY ENTRY & LIVE VALIDATION
   let apiKey = '';
   let validated = false;
+  let userName = '';
+  let userEmail = '';
   
   // Try to load key from existing keychain if any
   const existingKey = await Keychain.get();
@@ -35,7 +37,7 @@ export async function runSetupWizard(): Promise<void> {
 
     if (!apiKey) {
       console.log(chalk.gray('\nRécupérez votre clé API sur https://imara.consolidis.com'));
-      apiKey = await askQuestionMasked(chalk.cyan('› Collez votre Clé API d' + "'" + 'IMARA (saisie invisible) : '));
+      apiKey = await askQuestionMasked(chalk.cyan('› Collez votre Clé API d\'IMARA (saisie invisible) : '));
       if (!apiKey) {
         console.log(chalk.red('⚠ La clé API ne peut pas être vide.'));
         continue;
@@ -58,6 +60,8 @@ export async function runSetupWizard(): Promise<void> {
       
       // Save valid key to system keychain
       await Keychain.save(apiKey);
+      userName = userInfo.name;
+      userEmail = userInfo.email;
       validated = true;
     } catch (error) {
       // Clear the loading line
@@ -106,6 +110,8 @@ export async function runSetupWizard(): Promise<void> {
   // Save config
   ConfigManager.set({
     defaultModel,
+    userName,
+    userEmail,
     onboardingDone: false, // will be marked true after tutorial is displayed
   });
 

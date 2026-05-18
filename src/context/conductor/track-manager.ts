@@ -2,6 +2,7 @@
 // Manages .imara/conductor/ tracks in the current project directory.
 import * as fs from 'fs';
 import * as path from 'path';
+import { ConfigManager } from '../../config/config-manager';
 
 export interface TrackMeta {
   id: string;
@@ -128,6 +129,29 @@ ${techStack}
 
     const now = new Date().toISOString();
 
+    // 1. Get session author name with dynamic fallback hierarchy
+    let author = ConfigManager.get().userName || '';
+    if (!author) {
+      try {
+        const { execSync } = require('child_process');
+        author = execSync('git config user.name', { encoding: 'utf-8' }).trim();
+      } catch {
+        author = process.env.USER || process.env.USERNAME || 'Unknown Author';
+      }
+    }
+
+    // 2. Write metadata.json
+    const metadata = {
+      trackId: id,
+      title: title,
+      author: author,
+      status: 'in_progress',
+      createdAt: now,
+      updatedAt: now,
+      validated: false
+    };
+    fs.writeFileSync(path.join(dir, 'metadata.json'), JSON.stringify(metadata, null, 2), 'utf-8');
+
     // index.md
     fs.writeFileSync(path.join(dir, 'index.md'),
       `# Track ${nextNum} — ${title}\n\n**Statut :** 🟡 En cours\n**Créé :** ${now.slice(0, 10)}\n\n## Objectif\n(À compléter)\n`, 'utf-8');
@@ -154,6 +178,19 @@ ${techStack}
     if (track) {
       track.validated = true;
       this.setActive(track);
+
+      // Update local metadata.json if present
+      const metaPath = path.join(track.dir, 'metadata.json');
+      if (fs.existsSync(metaPath)) {
+        try {
+          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+          meta.validated = true;
+          meta.updatedAt = new Date().toISOString();
+          fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
+        } catch {
+          // Ignore gracefully
+        }
+      }
     }
   }
 

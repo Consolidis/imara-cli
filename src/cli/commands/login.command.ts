@@ -18,6 +18,13 @@ export async function loginCommand(options: Record<string, unknown>) {
     
     await Keychain.save(apiKey);
     
+    // Save user info to local config
+    const { ConfigManager } = require('../../config/config-manager');
+    ConfigManager.set({
+      userName: userInfo.name,
+      userEmail: userInfo.email
+    });
+    
     stopSpinner();
     console.log(chalk.green(`\nConnexion réussie !`));
     console.log(`Utilisateur: ${userInfo.name} (${userInfo.email})`);
