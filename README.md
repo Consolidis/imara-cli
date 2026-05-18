@@ -72,6 +72,25 @@ En saisissant `y`, vous restaurez instantanément tout le contexte de travail. E
 ### 5. Garbage Collector Asynchrone (GC)
 Afin d'éviter que la base de données ne prenne de l'espace disque inutilement, un démon automatique s'exécute silencieusement en tâche de fond **1 seconde après le démarrage de la CLI** et supprime définitivement toutes les sessions inactives de plus de **30 jours**.
 
+## 🌐 Conductor Fédéré & Multi-Dépôts Git (Support Monorepo & Multi-App)
+
+IMARA CLI intègre un support de pointe pour les architectures complexes, les monorepos et les projets composés de plusieurs applications autonomes (ex: `backend`, `frontend`, `cli`) possédant chacun leur propre dépôt Git (`.git`).
+
+### 1. Découverte Ascendante Dynamique (Dynamic Upward Discovery)
+Lorsque vous lancez une commande `imara chat` ou `imara track` depuis un sous-dossier (par exemple, profondément niché dans `imara-cli/src/`), la CLI grimpe automatiquement et récursivement les répertoires parents pour localiser la racine de l'orchestration globale.
+* Elle recherche les dossiers `conductor/`, `backend/conductor/` ou `.imara/conductor/`.
+* Une fois trouvée, cette racine devient la **Source of Truth** centralisée pour tous vos fichiers de track (plans, spécifications, statuts, historique).
+
+### 2. Scanner Multi-Dépôts Git (Unified Multi-Git Status)
+Au cours de l'analyse, IMARA explore dynamiquement votre workspace (parents et enfants immédiats) pour détecter tous les dépôts Git indépendants.
+* Elle identifie la branche courante et le statut des fichiers modifiés/stades/non suivis de chaque application distincte (`backend/`, `frontend/`, `imara-cli/`).
+* Ces métadonnées sont consolidées et injectées de manière transparente dans le prompt système de l'agent ReAct. L'IA a donc une **compréhension transversale, globale et temps réel** des modifications Git de toute la base de code.
+
+### 3. Opérations Shell Ciblées & Sécurisées (`run_command`)
+L'outil `run_command` à disposition de l'agent a été étendu avec un paramètre optionnel `cwd` pour permettre des opérations ultra-précises :
+* **Ciblage de Dépôt** : L'IA peut orchestrer des commits, attacher des `git notes` d'audit ou installer des dépendances spécifiquement dans un sous-dépôt en fournissant `cwd: "backend"`.
+* **Garde-Fou de Sécurité** : Une barrière de confinement valide systématiquement le chemin `cwd` et bloque immédiatement toute exécution ciblant des répertoires situés hors des limites physiques du projet.
+
 ## 🏗️ Méthodologie Conductor
 
 Pour une explication détaillée de la méthodologie, consultez [CONDUCTOR.md](./CONDUCTOR.md).
