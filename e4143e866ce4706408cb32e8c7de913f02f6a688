@@ -1,0 +1,1 @@
+Polished the API rate limit / block warning message to remove any internal mentions of Cloudflare, replacing it with elegant, unified 'IMARA / API Pause' branding to ensure cohesive user experience.
