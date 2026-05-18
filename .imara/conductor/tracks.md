@@ -8,6 +8,8 @@
 
 ## Archived
 - **008-persistance-des-sessions-avec-sqlite**: [x] 100% (Base de données SQLite unifiée dans ~/.imara/data/imara.db avec migrations, confinement et isolation par chemin de projet courant, auto-resume interactif résilient, démon GC asynchrone de 30 jours, et 146 tests verts)
+- **001-test-feature**: [x] 100% (Track temporaire de test sans contenu fonctionnel — Archivé)
+- **003-wit-phase-2-acc-s-contexte-et-integration-conversation**: [x] 100% (Modèle de spécification initial non utilisé et obsolète — Archivé)
 - **002-test-feature**: [x] 100% (Track de test sans contenu fonctionnel)
 - **002-stabilisation-du-noyau-et-robustesse**: [x] 100% (Noyau stable, 43 tests, Result<T,E>, ConfigManager)
 - **003-experience-utilisateur-et-ux**: [x] 100% (Theme, status-bar, error-panel, tool-call spinner)
