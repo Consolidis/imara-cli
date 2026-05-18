@@ -80,6 +80,7 @@ IMARA CLI intègre un support de pointe pour les architectures complexes, les mo
 Lorsque vous lancez une commande `imara chat` ou `imara track` depuis un sous-dossier (par exemple, profondément niché dans `imara-cli/src/`), la CLI grimpe automatiquement et récursivement les répertoires parents pour localiser la racine de l'orchestration globale.
 * Elle recherche les dossiers `conductor/`, `backend/conductor/` ou `.imara/conductor/`.
 * Une fois trouvée, cette racine devient la **Source of Truth** centralisée pour tous vos fichiers de track (plans, spécifications, statuts, historique).
+* **Repli de Sécurité (Fallback)** : Si aucun dossier Conductor n'est trouvé après avoir remonté jusqu'à la racine, la CLI effectue un repli automatique et transparent en ciblant `./.imara/conductor/` à l'intérieur du répertoire de travail actuel (`process.cwd()`), garantissant un fonctionnement fluide sans interruption ni plantage.
 
 ### 2. Scanner Multi-Dépôts Git (Unified Multi-Git Status)
 Au cours de l'analyse, IMARA explore dynamiquement votre workspace (parents et enfants immédiats) pour détecter tous les dépôts Git indépendants.
