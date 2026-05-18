@@ -369,9 +369,13 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
       if (!session) {
         session = store.createSession(name, process.cwd());
       }
-      store.saveMessages(session.id, agent.getMessages());
-      currentSessionId = session.id;
-      console.log(chalk.hex(theme.accent)(`\n  Session sauvegardée : ${chalk.bold(name)} (${session.id})\n`));
+      if (session) {
+        store.saveMessages(session.id, agent.getMessages());
+        currentSessionId = session.id;
+        console.log(chalk.hex(theme.accent)(`\n  Session sauvegardée : ${chalk.bold(name)} (${session.id})\n`));
+      } else {
+        console.log(chalk.hex(theme.warning)('\n  Impossible de sauvegarder la session.\n'));
+      }
       rl.prompt();
       return;
     }

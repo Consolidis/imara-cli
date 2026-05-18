@@ -1,12 +1,13 @@
 # Tracks Registry
 
 ## In Progress
-- **008-persistance-des-sessions-avec-sqlite**: [~] 10% (Fusionné et consolidé avec 004, 009 et 010. Spécifications techniques et plan de route unifiés écrits. Prêt pour l'implémentation de better-sqlite3.)
+(None)
 
 ## Backlog
 (None - tous les tracks sont completes ou archives.)
 
 ## Archived
+- **008-persistance-des-sessions-avec-sqlite**: [x] 100% (Base de données SQLite unifiée dans ~/.imara/data/imara.db avec migrations, confinement et isolation par chemin de projet courant, auto-resume interactif résilient, démon GC asynchrone de 30 jours, et 146 tests verts)
 - **002-test-feature**: [x] 100% (Track de test sans contenu fonctionnel)
 - **002-stabilisation-du-noyau-et-robustesse**: [x] 100% (Noyau stable, 43 tests, Result<T,E>, ConfigManager)
 - **003-experience-utilisateur-et-ux**: [x] 100% (Theme, status-bar, error-panel, tool-call spinner)
