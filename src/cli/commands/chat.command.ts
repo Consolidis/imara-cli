@@ -235,6 +235,7 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         console.log(`    ${chalk.hex(theme.secondary)('/tokens')}     : Afficher l'utilisation et le coût`);
         console.log(`    ${chalk.hex(theme.secondary)('/model <id>')} : Changer de modèle (flash, standard, zuri)`);
         console.log(`    ${chalk.hex(theme.secondary)('/save [name]')} : Sauvegarder la session`);
+        console.log(`    ${chalk.hex(theme.secondary)('/checkpoint')}   : Créer un checkpoint de session`);
         console.log(`    ${chalk.hex(theme.secondary)('/clear')}      : Effacer l'historique`);
         console.log(`    ${chalk.hex(theme.secondary)('/welcome')}    : Rejouer le tutoriel interactif`);
         console.log(`    ${chalk.hex(theme.secondary)('/setup')}      : Relancer la configuration initiale`);
@@ -384,6 +385,19 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
           console.log(chalk.hex(theme.accent)(`\n  Session sauvegardée : ${chalk.bold(name)} (${session.id})\n`));
         } else {
           console.log(chalk.hex(theme.warning)('\n  Impossible de sauvegarder la session.\n'));
+        }
+        rl.prompt();
+        return;
+      }
+
+      if (input === '/checkpoint') {
+        const name = `checkpoint_${Date.now()}`;
+        const session = store.createSession(name, process.cwd());
+        if (session) {
+          store.saveMessages(session.id, agent.getMessages());
+          console.log(chalk.hex(theme.accent)(`\n  ✓ Checkpoint de session créé : ${chalk.bold(name)} (${session.id})\n`));
+        } else {
+          console.log(chalk.hex(theme.warning)('\n  Impossible de créer le checkpoint.\n'));
         }
         rl.prompt();
         return;
