@@ -198,11 +198,14 @@ export class Agent {
 
     if (this.isDangerousTool(name) && !this.options.yes) {
       stopToolCallSpinner();
-      const confirmed = await confirmAction(`Voulez-vous exécuter le tool "${name}" ?`);
-      if (!confirmed) {
+      const choice = await confirmAction(`Voulez-vous exécuter le tool "${name}" ?`);
+      if (choice === 'no') {
         this.pushToolResult(id, name, 'Exécution annulée par l\'utilisateur.');
         showToolResult(name, 'Annulé');
         return;
+      }
+      if (choice === 'always') {
+        this.options.yes = true;
       }
       startToolCallSpinner(name, args);
     }

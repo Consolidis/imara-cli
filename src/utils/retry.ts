@@ -7,8 +7,8 @@ export interface RetryConfig {
 
 export const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
   maxRetries: 3,
-  baseDelayMs: 1000,
-  maxDelayMs: 8000,
+  baseDelayMs: process.env.NODE_ENV === 'test' ? 0 : 1000,
+  maxDelayMs: process.env.NODE_ENV === 'test' ? 0 : 8000,
   retryableStatusCodes: [408, 429, 500, 502, 503, 504],
 };
 

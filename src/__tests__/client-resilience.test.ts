@@ -43,7 +43,7 @@ describe('Client Resilience & Cache Fallback', () => {
     expect(successRes.content).toBe('Hello, this is a real response');
 
     // 2. Now mock fetch to fail with a network error
-    fetchMock.mockRejectedValueOnce(new Error('Network connection failed'));
+    fetchMock.mockRejectedValue(new Error('Network connection failed'));
 
     // Call API again with same messages: should resolve from Cache Fallback instead of throwing!
     const fallbackRes = await client.chat(messages, { model: 'flash', maxTokens: 100 });
