@@ -1,0 +1,1 @@
+Extended RunCommandTool with optional cwd parameter and safety boundary checks to allow targeted cross-repository commands. Isolated circuit breaker persistent state path for tests to eliminate parallel Vitest test state pollution.
