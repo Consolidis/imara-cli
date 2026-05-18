@@ -6,6 +6,10 @@ import { Keychain } from '../auth/keychain';
 vi.mock('../api/imara-client');
 vi.mock('../auth/keychain');
 vi.mock('../ui/renderer');
+vi.mock('../ui/confirm', () => ({
+  confirmAction: vi.fn().mockResolvedValue('yes'),
+  promptLoopResolution: vi.fn().mockResolvedValue('pause')
+}));
 vi.mock('../context/context-builder', () => ({
   ContextBuilder: {
     buildSystemPrompt: vi.fn().mockResolvedValue('Mocked System Prompt')
@@ -61,5 +65,37 @@ describe('Agent', () => {
 
     expect(mockChat).toHaveBeenCalledTimes(2);
     expect(agent.getSessionStats().tokens).toBe(30);
+  });
+
+  it('should detect loop and pause', async () => {
+    const { promptLoopResolution } = await import('../ui/confirm');
+    vi.mocked(promptLoopResolution).mockResolvedValue('pause');
+
+    const mockChat = vi.fn()
+      .mockResolvedValueOnce({
+        content: '',
+        finishReason: 'tool_calls',
+        toolCalls: [{ id: '1', name: 'read_file', arguments: { path: 'test.txt' } }],
+        usage: { totalTokens: 10, costFcfa: 0.1 }
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        finishReason: 'tool_calls',
+        toolCalls: [{ id: '2', name: 'read_file', arguments: { path: 'test.txt' } }],
+        usage: { totalTokens: 10, costFcfa: 0.1 }
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        finishReason: 'tool_calls',
+        toolCalls: [{ id: '3', name: 'read_file', arguments: { path: 'test.txt' } }],
+        usage: { totalTokens: 10, costFcfa: 0.1 }
+      });
+    
+    vi.mocked(ImaraClient).prototype.chat = mockChat;
+
+    const agent = new Agent();
+    await agent.run('test loop');
+
+    expect(promptLoopResolution).toHaveBeenCalled();
   });
 });

@@ -4,7 +4,8 @@ import { Keychain } from '../auth/keychain';
 import { ToolExecutor } from './tools';
 import { ContextBuilder } from '../context/context-builder';
 import { showResponse, showToolCall, showToolResult, showIntention, startToolCallSpinner, stopToolCallSpinner } from '../ui/renderer';
-import { confirmAction } from '../ui/confirm';
+import { confirmAction, promptLoopResolution } from '../ui/confirm';
+import * as path from 'path';
 import { TrackLogger } from '../context/conductor/track-logger';
 import { ContextWindow } from '../context/context-window';
 import { ConfigManager } from '../config';
@@ -37,12 +38,19 @@ export class Agent {
   private messages: Message[] = [];
   private options: Required<AgentOptions>;
   private client: ImaraClient | null = null;
-  private maxIterations = 40;
   private totalTokensUsed = 0;
   private totalCostFcfa = 0;
   private contextWindow: ContextWindow;
   private cancelled = false;
+  private paused = false;
   private toolCallHistory: { name: string; args: string }[] = [];
+  private richToolCallHistory: {
+    name: string;
+    args: ToolArguments;
+    argsStr: string;
+    targetFile?: string;
+    timestamp: number;
+  }[] = [];
 
   constructor(options: AgentOptions = {}) {
     this.options = {
@@ -68,6 +76,7 @@ export class Agent {
 
   resetCancellation(): void {
     this.cancelled = false;
+    this.paused = false;
   }
 
   async run(prompt: string): Promise<void> {
@@ -93,9 +102,12 @@ export class Agent {
     const silentTools = new Set(['list_directory']);
     let iterations = 0;
 
-    while (iterations < this.maxIterations) {
+    while (true) {
       if (this.cancelled) {
         throw new Error('Interruption : exécution annulée par l\'utilisateur.');
+      }
+      if (this.paused) {
+        return;
       }
       iterations++;
 
@@ -144,12 +156,15 @@ export class Agent {
             showResponse(response.content);
           }
           for (const toolCall of response.toolCalls) {
-            if (this.cancelled) {
-              throw new Error('Interruption : exécution annulée par l\'utilisateur.');
+            if (this.cancelled || this.paused) {
+              break;
             }
             const isSilent = silentTools.has(toolCall.name);
             if (!isSilent) showIntention(toolCall.name, toolCall.arguments);
             await this.handleToolCall(toolCall, isSilent);
+          }
+          if (this.paused) {
+            break;
           }
           // MAJ STATUS BAR APRES TOOLS
           continue;
@@ -168,12 +183,6 @@ export class Agent {
         spinner.fail(chalk.hex(theme.error)(userMessage));
         throw new Error(userMessage);
       }
-    }
-
-    if (iterations >= this.maxIterations) {
-      const msg = "J'ai atteint la limite maximale d'étapes de réflexion autorisées pour ce tour pour des raisons de sécurité. Écrivez simplement 'continue' pour que je poursuive la suite des tâches.";
-      this.messages.push({ role: 'assistant', content: msg });
-      showResponse(msg);
     }
   }
 
@@ -202,32 +211,133 @@ export class Agent {
     this.messages.push(assistantMsg);
   }
 
+  private getTargetFilePath(name: string, args: ToolArguments): string | undefined {
+    if (args && typeof args.path === 'string') {
+      try {
+        return path.resolve(process.cwd(), args.path);
+      } catch {
+        return undefined;
+      }
+    }
+    if (name === 'read_multiple_files' && args && Array.isArray(args.paths)) {
+      try {
+        return args.paths.length > 0 && typeof args.paths[0] === 'string'
+          ? path.resolve(process.cwd(), args.paths[0])
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+
+  private detectCallCycle(signatures: string[]): boolean {
+    const n = signatures.length;
+    for (let k = 1; k <= 4; k++) {
+      if (n < 3 * k) continue;
+      let isCycle = true;
+      const seq1 = signatures.slice(n - k);
+      for (let rep = 1; rep < 3; rep++) {
+        const seqStart = n - (rep + 1) * k;
+        const seqCurrent = signatures.slice(seqStart, seqStart + k);
+        for (let i = 0; i < k; i++) {
+          if (seq1[i] !== seqCurrent[i]) {
+            isCycle = false;
+            break;
+          }
+        }
+        if (!isCycle) break;
+      }
+      if (isCycle) return true;
+    }
+    return false;
+  }
+
+  private detectRepeatingFileModifications(history: any[]): boolean {
+    const modifyingTools = new Set(['write_file', 'append_file', 'replace_in_file']);
+    const modCounts: Record<string, number> = {};
+    for (const record of history) {
+      if (modifyingTools.has(record.name) && record.targetFile) {
+        modCounts[record.targetFile] = (modCounts[record.targetFile] || 0) + 1;
+        if (modCounts[record.targetFile] >= 4) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private detectLoop(name: string, args: ToolArguments): { isLoop: boolean; reason: string } {
+    const newRecord = {
+      name,
+      args,
+      argsStr: JSON.stringify(args),
+      targetFile: this.getTargetFilePath(name, args),
+      timestamp: Date.now()
+    };
+    
+    const tempHistory = [...this.richToolCallHistory, newRecord];
+    if (tempHistory.length > 10) tempHistory.shift();
+
+    // 1. Check for repeating call cycles
+    const signatures = tempHistory.map(tc => `${tc.name}:${tc.argsStr}`);
+    if (this.detectCallCycle(signatures)) {
+      return { isLoop: true, reason: `Répétition cyclique de l'action "${name}"` };
+    }
+
+    // 2. Check for repeating file modifications
+    if (this.detectRepeatingFileModifications(tempHistory)) {
+      const filename = newRecord.targetFile ? path.basename(newRecord.targetFile) : 'inconnu';
+      return { isLoop: true, reason: `Modifications répétées du fichier "${filename}"` };
+    }
+
+    return { isLoop: false, reason: '' };
+  }
+
   private async handleToolCall(toolCall: ParsedToolCall, isSilent: boolean): Promise<void> {
-    if (this.cancelled) {
+    if (this.cancelled || this.paused) {
       throw new Error('Interruption : exécution annulée par l\'utilisateur.');
     }
     const { id, name, arguments: args } = toolCall;
     const argsStr = JSON.stringify(args);
 
     // Track tool execution history for loop detection
-    this.toolCallHistory.push({ name, args: argsStr });
-    if (this.toolCallHistory.length > 5) this.toolCallHistory.shift();
-
-    // Check if the last 3 tool calls are identical!
-    if (this.toolCallHistory.length >= 3) {
-      const last3 = this.toolCallHistory.slice(-3);
-      const isLoop = last3.every(tc => tc.name === name && tc.args === argsStr);
-      if (isLoop) {
-        // Inject an alert to the agent's memory to force a change of strategy
-        const loopWarning = `SYSTEM WARNING: You have executed the tool '${name}' with the exact same arguments consecutively 3 times. You are in an infinite loop! Change your strategy immediately: fix any persistent file errors, analyze the output more deeply, or explain the roadblocks and ask the user for guidance instead of repeating the same action.`;
+    const loopStatus = this.detectLoop(name, args);
+    if (loopStatus.isLoop) {
+      if (!isSilent) stopToolCallSpinner();
+      const answer = await promptLoopResolution(`Boucle potentielle détectée : ${loopStatus.reason}.`);
+      if (answer === 'pause') {
+        this.richToolCallHistory = [];
+        this.paused = true;
+        
+        process.stdout.write(
+          chalk.hex(theme.warning)(
+            `\n⏸ Exécution mise en pause par l'utilisateur. Historique conservé.\n` +
+            `  Vous pouvez inspecter l'état du projet, ou taper ${chalk.bold('continue')} pour reprendre.\n\n`
+          )
+        );
+        
+        this.pushToolResult(id, name, 'Exécution mise en pause par l\'utilisateur.');
+        if (!isSilent) showToolResult(name, 'Mis en pause');
+        return;
+      } else {
+        const loopWarning = `SYSTEM WARNING: You are currently repeating actions or files. Loop detected: ${loopStatus.reason}. CHANGE your strategy immediately! Do not repeat the same action or argument sequence. Focus on explaining the issue or finding a different technical path.`;
         this.messages.push({ role: 'system', content: loopWarning });
         process.stdout.write(
-          chalk.hex(theme.warning ?? '#ffcc00')(`\n  ⚠ [Détecteur de Boucle] Actions répétitives détectées. Stratégie corrigée de force.\n`)
+          chalk.hex(theme.warning ?? '#ffcc00')(`\n  ⚠ [Détecteur de Boucle] Passage forcé par l'utilisateur. Stratégie corrigée en mémoire.\n`)
         );
-        // Clear history to avoid re-triggering immediately
-        this.toolCallHistory = [];
       }
     }
+
+    // Record the current tool call in rich history
+    this.richToolCallHistory.push({
+      name,
+      args,
+      argsStr,
+      targetFile: this.getTargetFilePath(name, args),
+      timestamp: Date.now()
+    });
+    if (this.richToolCallHistory.length > 10) this.richToolCallHistory.shift();
 
     if (!isSilent) startToolCallSpinner(name, args);
 

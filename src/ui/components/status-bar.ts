@@ -18,20 +18,11 @@ let lastLineCount = 0;
 let isStatusBarActive = false;
 let lastKnownState: StatusState | null = null;
 
-/**
- * Renders a sticky bottom status bar below the current prompt line.
- * Uses ANSI escape sequences to save/restore the cursor position.
- */
 export function renderStatusBar(state: StatusState): void {
   lastKnownState = state;
   const termWidth = process.stdout.columns || 80;
 
-  // 1. Erase previous bar if active
-  if (isStatusBarActive && lastLineCount > 0) {
-    process.stdout.write(`\x1b[${lastLineCount}B\r\x1b[2K\x1b[${lastLineCount}A\r`);
-  }
-
-  // 2. Format network pastille
+  // Format network pastille
   const networkStatus = networkEvents.getStatus();
   let netStr = '';
   if (networkStatus === 'online') {
@@ -70,9 +61,8 @@ export function renderStatusBar(state: StatusState): void {
 
   const bar = chalk.bgHex(theme.bg)(chalk.hex(theme.muted)(` ${line} `));
 
-  // 3. Print the bar below the prompt and restore cursor relatively
-  process.stdout.write(`\x1b[1B\x1b[2K\r${bar}\x1b[1A\r`);
-  lastLineCount = 1;
+  // Print the bar cleanly above the prompt
+  process.stdout.write(`\r\x1b[2K${bar}\n`);
   isStatusBarActive = true;
 }
 
@@ -80,11 +70,7 @@ export function renderStatusBar(state: StatusState): void {
  * Erases the status bar from the terminal completely to avoid it entering the scrollback history.
  */
 export function clearStatusBar(): void {
-  if (isStatusBarActive && lastLineCount > 0) {
-    process.stdout.write(`\x1b[${lastLineCount}B\r\x1b[2K\x1b[${lastLineCount}A\r`);
-    lastLineCount = 0;
-    isStatusBarActive = false;
-  }
+  isStatusBarActive = false;
 }
 
 // Listen for network status changes to dynamically update the status bar

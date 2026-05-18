@@ -24,3 +24,27 @@ export async function confirmAction(message: string): Promise<'yes' | 'no' | 'al
     return 'no';
   }
 }
+
+export async function promptLoopResolution(message: string): Promise<'continue' | 'pause'> {
+  if (process.env.NODE_ENV === 'test') {
+    return 'continue';
+  }
+
+  const { Select } = require('enquirer');
+  const prompt = new Select({
+    name: 'loopAction',
+    message: chalk.hex(theme.warning ?? '#ffcc00')(`⚠ ${message}`),
+    choices: [
+      { name: 'continue', message: chalk.hex(theme.accent ?? '#55ff55')('Continuer (forcer le passage)') },
+      { name: 'pause', message: chalk.hex(theme.error ?? '#ff5555')('Mettre en pause et revenir au chat') }
+    ]
+  });
+
+  try {
+    const answer = await prompt.run();
+    return answer as 'continue' | 'pause';
+  } catch {
+    return 'pause';
+  }
+}
+

@@ -217,6 +217,10 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         return;
       }
 
+      if (process.env.NODE_ENV !== 'test') {
+        process.stdout.write(`\x1b[1A\r\x1b[2K${chalk.hex(theme.muted)('›')} ${chalk.gray(line)}\n`);
+      }
+
       if (input === '/exit' || input === '/quit') {
         rl.close();
         return;
@@ -547,7 +551,7 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
       try {
         // Small delay to let the UI settle
         await new Promise(resolve => setTimeout(resolve, 500));
-        console.log(chalk.hex(theme.primary)(`› ${initialPrompt}`));
+        console.log(`${chalk.hex(theme.muted)('›')} ${chalk.gray(initialPrompt)}`);
         await agent.run(initialPrompt);
 
         // Auto-save initial prompt interaction
