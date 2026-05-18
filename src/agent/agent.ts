@@ -42,6 +42,7 @@ export class Agent {
   private totalCostFcfa = 0;
   private contextWindow: ContextWindow;
   private cancelled = false;
+  private toolCallHistory: { name: string; args: string }[] = [];
 
   constructor(options: AgentOptions = {}) {
     this.options = {
@@ -193,6 +194,27 @@ export class Agent {
       throw new Error('Interruption : exécution annulée par l\'utilisateur.');
     }
     const { id, name, arguments: args } = toolCall;
+    const argsStr = JSON.stringify(args);
+
+    // Track tool execution history for loop detection
+    this.toolCallHistory.push({ name, args: argsStr });
+    if (this.toolCallHistory.length > 5) this.toolCallHistory.shift();
+
+    // Check if the last 3 tool calls are identical!
+    if (this.toolCallHistory.length >= 3) {
+      const last3 = this.toolCallHistory.slice(-3);
+      const isLoop = last3.every(tc => tc.name === name && tc.args === argsStr);
+      if (isLoop) {
+        // Inject an alert to the agent's memory to force a change of strategy
+        const loopWarning = `SYSTEM WARNING: You have executed the tool '${name}' with the exact same arguments consecutively 3 times. You are in an infinite loop! Change your strategy immediately: fix any persistent file errors, analyze the output more deeply, or explain the roadblocks and ask the user for guidance instead of repeating the same action.`;
+        this.messages.push({ role: 'system', content: loopWarning });
+        process.stdout.write(
+          chalk.hex(theme.warning ?? '#ffcc00')(`\n  ⚠ [Détecteur de Boucle] Actions répétitives détectées. Stratégie corrigée de force.\n`)
+        );
+        // Clear history to avoid re-triggering immediately
+        this.toolCallHistory = [];
+      }
+    }
 
     if (!isSilent) startToolCallSpinner(name, args);
 

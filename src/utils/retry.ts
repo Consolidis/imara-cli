@@ -3,6 +3,7 @@ export interface RetryConfig {
   baseDelayMs?: number;
   maxDelayMs?: number;
   retryableStatusCodes?: number[];
+  onRetry?: (error: unknown, attempt: number, delayMs: number) => void;
 }
 
 export const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
@@ -10,6 +11,7 @@ export const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
   baseDelayMs: process.env.NODE_ENV === 'test' ? 0 : 1000,
   maxDelayMs: process.env.NODE_ENV === 'test' ? 0 : 8000,
   retryableStatusCodes: [408, 429, 500, 502, 503, 504],
+  onRetry: () => {},
 };
 
 /**
@@ -19,6 +21,20 @@ export function isRetriableError(error: unknown, config: Required<RetryConfig> =
   if (!error) return false;
   const msg = error instanceof Error ? error.message : String(error);
   const lowerMsg = msg.toLowerCase();
+
+  // Explicit Cloudflare blocks / saturations / rate limits are always retriable
+  if (
+    lowerMsg.includes('cloudflare') ||
+    lowerMsg.includes('1015') ||
+    lowerMsg.includes('429') ||
+    lowerMsg.includes('too many requests') ||
+    lowerMsg.includes('rate limit') ||
+    lowerMsg.includes('satur') ||
+    lowerMsg.includes('503') ||
+    lowerMsg.includes('502')
+  ) {
+    return true;
+  }
 
   // Exclude explicit client failures immediately
   if (
@@ -92,6 +108,12 @@ export async function executeWithRetry<T>(
       // Full Jitter: random(0, min(maxDelayMs, baseDelayMs * 2^attempt))
       const temp = Math.min(finalConfig.maxDelayMs, finalConfig.baseDelayMs * Math.pow(2, attempt));
       const delayMs = Math.random() * temp;
+
+      if (finalConfig.onRetry) {
+        try {
+          finalConfig.onRetry(error, attempt, delayMs);
+        } catch { /* ignore callback errors */ }
+      }
 
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }

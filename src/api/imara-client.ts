@@ -8,6 +8,7 @@ import { CacheManager } from '../cache/cache-manager';
 import { computeContextHash } from '../utils/cache';
 import { join } from 'path';
 import { homedir } from 'os';
+import chalk from 'chalk';
 
 function sanitizeForJson(value: string): string {
   return value.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
@@ -138,6 +139,17 @@ export class ImaraClient {
           }
 
           return data;
+        }, {
+          maxRetries: process.env.NODE_ENV === 'test' ? 0 : 5,
+          baseDelayMs: process.env.NODE_ENV === 'test' ? 0 : 2000,
+          maxDelayMs: process.env.NODE_ENV === 'test' ? 0 : 15000,
+          onRetry: (error, attempt, delayMs) => {
+            if (process.env.NODE_ENV === 'test') return;
+            const sec = Math.ceil(delayMs / 1000);
+            process.stdout.write(
+              chalk.hex('#ffcc00')(`\n  ⚠ [Cloudflare / API Pause] Connexion saturée ou bloquée. Pause de ${sec}s avant tentative ${attempt + 1}/5...\n`)
+            );
+          }
         });
       });
 
