@@ -32,8 +32,10 @@ export class ContextWindow {
 
   constructor(options: ContextWindowOptions) {
     this.maxTokens = options.maxTokens;
-    this.warningTokens = Math.floor(this.maxTokens * (options.warningThreshold / 100));
-    this.compactTokens = Math.floor(this.maxTokens * (options.compactThreshold / 100));
+    const warnFactor = options.warningThreshold > 1 ? options.warningThreshold / 100 : options.warningThreshold;
+    const compactFactor = options.compactThreshold > 1 ? options.compactThreshold / 100 : options.compactThreshold;
+    this.warningTokens = Math.floor(this.maxTokens * warnFactor);
+    this.compactTokens = Math.floor(this.maxTokens * compactFactor);
   }
 
   getStats(messages: Message[]): WindowStats {
