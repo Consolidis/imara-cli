@@ -92,6 +92,20 @@ L'outil `run_command` à disposition de l'agent a été étendu avec un paramèt
 * **Ciblage de Dépôt** : L'IA peut orchestrer des commits, attacher des `git notes` d'audit ou installer des dépendances spécifiquement dans un sous-dépôt en fournissant `cwd: "backend"`.
 * **Garde-Fou de Sécurité** : Une barrière de confinement valide systématiquement le chemin `cwd` et bloque immédiatement toute exécution ciblant des répertoires situés hors des limites physiques du projet.
 
+## ⚡ Résolution de Cycle de Vie & Robustesse REPL (CLI REPL Exit Bug Resolution)
+
+IMARA CLI intègre un cycle de vie asynchrone entièrement chaîné et robuste qui élimine tout risque d'interruption ou d'arrêt prématuré du processus standard lors de l'exécution interactive des commandes :
+
+### 1. Cycle de Vie Asynchrone Fédéré (Async Commander Lifecycle)
+* **Parseur Asynchrone** : Le point d'entrée principal (`index.ts`) utilise désormais `.parseAsync(process.argv)` au lieu du parseur synchrone d'origine de Commander.
+* **Chaînage des Actions** : Tous les gestionnaires d'actions de la CLI (`program.ts`) sont déclarés comme fonctions `async` et font l'objet d'un `await` explicite. Cela empêche le thread de parsing de se terminer prématurément et garantit le maintien en mémoire active de la session.
+* **Forwarding Sécurisé (`track implement`)** : La délégation interne de la commande `imara track implement <id>` vers `chatCommand` est maintenant pleinement attendue (`await`), maintenant la CLI active pendant toute la phase de cadrage et de dialogue.
+
+### 2. Confinement des Flux Standard (Promise-wrapped REPL Loop)
+* **Flux Persistant** : L'initialisation de `chatCommand` renvoie une promesse (`Promise<void>`) qui reste en attente et maintient le processus Node.js actif tant que l'interface interactive `readline` n'a pas été fermée (via `/exit`, `/quit` ou un signal `SIGINT`).
+* **Résolution Gracieuse sur Fermeture** : La promesse est résolue uniquement lors de l'événement `'close'` de `readline`, garantissant un cycle de vie propre de l'application et permettant un retour de contrôle propre au shell.
+* **Compatibilité des Tests (Graceful Test Execution)** : En environnement de test (`process.env.NODE_ENV === 'test'`), un mécanisme de détection résout la promesse immédiatement après le prompt initial. Cela permet aux tests unitaires de simuler des séquences d'entrées de ligne asynchrones de façon non-bloquante et d'éviter tout timeout.
+
 ## 🏗️ Méthodologie Conductor
 
 Pour une explication détaillée de la méthodologie, consultez [CONDUCTOR.md](./CONDUCTOR.md).
