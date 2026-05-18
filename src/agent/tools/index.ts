@@ -46,7 +46,7 @@ export class ToolExecutor {
         case 'list_directory':
           return ok(await ListDirectoryTool.run(args as { path?: string; recursive?: boolean }));
         case 'run_command':
-          return ok(await RunCommandTool.run(args as { command: string }));
+          return ok(await RunCommandTool.run(args as { command: string; cwd?: string }));
         case 'search_files':
           return ok(await SearchFilesTool.run(args as { pattern: string; filePattern?: string }));
         case 'read_multiple_files':

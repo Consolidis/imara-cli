@@ -43,6 +43,9 @@ export class CircuitBreaker {
   }
 
   private getPersistencePath(): string {
+    if (process.env.NODE_ENV === 'test') {
+      return join(process.cwd(), 'temp-circuit-breaker.json');
+    }
     return join(homedir(), '.imara', 'circuit-breaker.json');
   }
 
