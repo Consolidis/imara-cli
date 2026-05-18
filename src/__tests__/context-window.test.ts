@@ -82,5 +82,18 @@ describe('ContextWindow', () => {
       expect(result.length).toBeLessThan(msgs.length);
       expect(result.find(m => m.content.startsWith('RESUME'))).toBeDefined();
     });
+
+    it('should proactively truncate extremely large messages if they exceed maxTokens', () => {
+      const cw = new ContextWindow({ maxTokens: 25, warningThreshold: 50, compactThreshold: 85 });
+      const msgs: Message[] = [
+        { role: 'system', content: 'system' },
+        { role: 'user', content: 'A extremely huge message that definitely has many many characters and is way above the maximum token limit of 100 tokens, which would normally trigger an overflow error on the client and server side.' }
+      ];
+      const result = cw.compact(msgs);
+      const stats = cw.getStats(result);
+      
+      expect(stats.totalTokens).toBeLessThanOrEqual(35);
+      expect(result.some(m => m.content.includes('[CONTENU TRONQUÉ POUR CONTEXTE LIMITE]'))).toBe(true);
+    });
   });
 });

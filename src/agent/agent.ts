@@ -118,10 +118,17 @@ export class Agent {
       }
       if (check.action === 'compact') {
         const beforeCount = this.messages.length;
+        const beforeStats = this.contextWindow.getStats(this.messages);
         this.messages = this.contextWindow.compact(this.messages);
         const afterCount = this.messages.length;
-        if (afterCount < beforeCount) {
-          process.stdout.write(chalk.hex(theme.warning)(`\n⚠ Contexte compresse : ${beforeCount - afterCount} messages resumes pour economiser des tokens.\n`));
+        const afterStats = this.contextWindow.getStats(this.messages);
+        if (afterCount < beforeCount || afterStats.totalTokens < beforeStats.totalTokens) {
+          const savedTokens = beforeStats.totalTokens - afterStats.totalTokens;
+          process.stdout.write(
+            chalk.hex(theme.warning)(
+              `\n⚠ Contexte compressé : mémoire optimisée pour rester sous la limite (${savedTokens > 0 ? `-${savedTokens.toLocaleString()} tokens` : ''}).\n`
+            )
+          );
         }
       }
 

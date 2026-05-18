@@ -70,10 +70,14 @@ export class ContextWindow {
   }
 
   compact(messages: Message[], sessionId?: string): Message[] {
-    if (messages.length <= MIN_PRESERVE_MESSAGES) return messages;
+    if (messages.length <= MIN_PRESERVE_MESSAGES) {
+      return this.truncateToFit(messages);
+    }
 
     const systemMessage = messages.find(m => m.role === 'system');
-    if (!systemMessage) return messages;
+    if (!systemMessage) {
+      return this.truncateToFit(messages);
+    }
 
     // Conserver system + 2 derniers echanges (user + assistant/tool)
     const tail = messages.slice(-2);
@@ -81,44 +85,94 @@ export class ContextWindow {
       m => m.role !== 'system' && !tail.includes(m)
     );
 
-    if (middleMessages.length === 0) return messages;
+    let compacted = messages;
+    if (middleMessages.length > 0) {
+      // Resumer les messages intermediaires
+      const summary = this.generateSummary(middleMessages);
 
-    // Resumer les messages intermediaires
-    const summary = this.generateSummary(middleMessages);
-
-    // Sauvegarde SQLite du résumé de contexte
-    if (sessionId) {
-      const provider = getStorage();
-      if (provider) {
-        try {
-          const latest = provider.getLatestSummary(sessionId);
-          const nextVersion = (latest?.version ?? 0) + 1;
-          provider.saveSummary({
-            sessionId,
-            content: summary,
-            tokenCount: countConversationTokens([{ role: 'system', content: summary }]),
-            createdAt: Date.now(),
-            version: nextVersion
-          });
-        } catch {
-          // Fallback silencieux en cas d'erreur SQLite
+      // Sauvegarde SQLite du résumé de contexte
+      if (sessionId) {
+        const provider = getStorage();
+        if (provider) {
+          try {
+            const latest = provider.getLatestSummary(sessionId);
+            const nextVersion = (latest?.version ?? 0) + 1;
+            provider.saveSummary({
+              sessionId,
+              content: summary,
+              tokenCount: countConversationTokens([{ role: 'system', content: summary }]),
+              createdAt: Date.now(),
+              version: nextVersion
+            });
+          } catch {
+            // Fallback silencieux en cas d'erreur SQLite
+          }
         }
       }
+
+      const summaryMessage: Message = {
+        role: 'system',
+        content: `RESUME DES ECHANGES PRECEDENTS : ${summary}`
+      };
+
+      compacted = [systemMessage, summaryMessage, ...tail];
     }
-
-    const summaryMessage: Message = {
-      role: 'system',
-      content: `RESUME DES ECHANGES PRECEDENTS : ${summary}`
-    };
-
-    const compacted = [systemMessage, summaryMessage, ...tail];
 
     // Si toujours au-dessus du seuil apres resume, tronquer les anciens
     if (this.getTotalTokens(compacted) >= this.compactTokens) {
-      return [systemMessage, ...tail];
+      compacted = [systemMessage, ...tail];
     }
 
-    return compacted;
+    // Troncature dure auto-correctrice pour s'assurer de ne jamais dépasser maxTokens
+    return this.truncateToFit(compacted);
+  }
+
+  private truncateToFit(messages: Message[]): Message[] {
+    let total = this.getTotalTokens(messages);
+    if (total <= this.maxTokens) return messages;
+
+    // Clone pour éviter les mutations directes
+    const cloned = messages.map(m => ({ ...m }));
+
+    while (total > this.maxTokens) {
+      let largestIndex = -1;
+      let largestLength = 0;
+
+      for (let i = 0; i < cloned.length; i++) {
+        const msg = cloned[i];
+        if (msg.role === 'system') continue;
+        if (msg.content && msg.content.length > largestLength) {
+          largestLength = msg.content.length;
+          largestIndex = i;
+        }
+      }
+
+      if (largestIndex === -1 || largestLength <= 60) {
+        break;
+      }
+
+      const msg = cloned[largestIndex];
+      const truncationSuffix = '\n... [CONTENU TRONQUÉ POUR CONTEXTE LIMITE] ...\n';
+      const cleanContent = msg.content.includes(truncationSuffix)
+        ? msg.content.replace(truncationSuffix, '')
+        : msg.content;
+      
+      const originalLen = cleanContent.length;
+      const targetLen = Math.floor(originalLen * 0.5);
+
+      if (targetLen < 10) {
+        msg.content = '...' + truncationSuffix;
+      } else if (msg.role === 'tool') {
+        msg.content = cleanContent.slice(0, targetLen) + truncationSuffix;
+      } else {
+        const half = Math.floor(targetLen / 2);
+        msg.content = cleanContent.slice(0, half) + truncationSuffix + cleanContent.slice(-half);
+      }
+
+      total = this.getTotalTokens(cloned);
+    }
+
+    return cloned;
   }
 
   private getTotalTokens(messages: Message[]): number {
