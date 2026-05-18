@@ -138,15 +138,11 @@ export class Agent {
         this.totalTokensUsed += response.usage.totalTokens;
         this.totalCostFcfa += response.usage.costFcfa;
 
-        if (response.content) {
-          this.messages.push({ role: 'assistant', content: response.content });
-          if (!this.isAck(response.content) || response.finishReason !== 'tool_calls') {
-            showResponse(response.content);
-          }
-        }
-
         if (response.finishReason === 'tool_calls' && response.toolCalls.length > 0) {
           this.pushAssistantToolCalls(response);
+          if (response.content && !this.isAck(response.content)) {
+            showResponse(response.content);
+          }
           for (const toolCall of response.toolCalls) {
             if (this.cancelled) {
               throw new Error('Interruption : exécution annulée par l\'utilisateur.');
@@ -157,6 +153,11 @@ export class Agent {
           }
           // MAJ STATUS BAR APRES TOOLS
           continue;
+        }
+
+        if (response.content) {
+          this.messages.push({ role: 'assistant', content: response.content });
+          showResponse(response.content);
         }
 
         // MAJ STATUS BAR A LA FIN

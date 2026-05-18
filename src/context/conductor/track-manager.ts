@@ -126,7 +126,7 @@ ${techStack}
   static newTrack(title: string): ActiveTrack {
     const tracksDir = this.getTracksDir();
     if (!fs.existsSync(tracksDir)) {
-      throw new Error('Conductor non initialisé. Lancez `imara init-conductor` d\'abord.');
+      this.init();
     }
 
     const existing = fs.readdirSync(tracksDir).filter(d => fs.statSync(path.join(tracksDir, d)).isDirectory());
