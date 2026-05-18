@@ -147,7 +147,7 @@ export class ImaraClient {
             if (process.env.NODE_ENV === 'test') return;
             const sec = Math.ceil(delayMs / 1000);
             process.stdout.write(
-              chalk.hex('#ffcc00')(`\n  ⚠ [Cloudflare / API Pause] Connexion saturée ou bloquée. Pause de ${sec}s avant tentative ${attempt + 1}/5...\n`)
+              chalk.hex('#ffcc00')(`\n  ⚠ [IMARA / API Pause] Connexion temporairement saturée. Pause de ${sec}s avant tentative ${attempt + 1}/5...\n`)
             );
           }
         });
