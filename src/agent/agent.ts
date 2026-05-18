@@ -37,7 +37,7 @@ export class Agent {
   private messages: Message[] = [];
   private options: Required<AgentOptions>;
   private client: ImaraClient | null = null;
-  private maxIterations = 20;
+  private maxIterations = 40;
   private totalTokensUsed = 0;
   private totalCostFcfa = 0;
   private contextWindow: ContextWindow;
@@ -171,7 +171,9 @@ export class Agent {
     }
 
     if (iterations >= this.maxIterations) {
-      console.warn('\nAttention: Nombre maximum d\'iterations atteint.');
+      const msg = "J'ai atteint la limite maximale d'étapes de réflexion autorisées pour ce tour pour des raisons de sécurité. Écrivez simplement 'continue' pour que je poursuive la suite des tâches.";
+      this.messages.push({ role: 'assistant', content: msg });
+      showResponse(msg);
     }
   }
 

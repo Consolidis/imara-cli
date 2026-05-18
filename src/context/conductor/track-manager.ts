@@ -144,7 +144,7 @@ ${techStack}
     if (!author) {
       try {
         const { execSync } = require('child_process');
-        author = execSync('git config user.name', { encoding: 'utf-8' }).trim();
+        author = execSync('git config user.name', { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
       } catch {
         author = process.env.USER || process.env.USERNAME || 'Unknown Author';
       }
