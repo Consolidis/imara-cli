@@ -43,14 +43,23 @@ export class RunCommandTool {
     }
 
     return new Promise((resolve, reject) => {
-      exec(args.command, { cwd: targetCwd, timeout: 60000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
-        const result = stdout + stderr;
-        if (error && !result) {
-          reject(new Error(error.message));
-        } else {
-          resolve(result || 'Commande exécutée (pas de sortie).');
+      exec(
+        args.command,
+        {
+          cwd: targetCwd,
+          timeout: 60000,
+          maxBuffer: 10 * 1024 * 1024,
+          stdio: ['ignore', 'pipe', 'pipe']
+        } as any,
+        (error: any, stdout: any, stderr: any) => {
+          const result = stdout + stderr;
+          if (error && !result) {
+            reject(new Error(error.message));
+          } else {
+            resolve(result || 'Commande exécutée (pas de sortie).');
+          }
         }
-      });
+      );
     });
   }
 }
