@@ -122,6 +122,16 @@ export class Agent {
       }).start();
 
       try {
+        // Dynamic Context Refresh: Keep system prompt (git status, active track, project map) 100% fresh in every turn
+        if (this.messages.length > 0 && this.messages[0].role === 'system') {
+          try {
+            const freshSystemPrompt = await ContextBuilder.buildSystemPrompt(this.options);
+            this.messages[0].content = freshSystemPrompt;
+          } catch (_err) {
+            // Fallback silently if system prompt build fails
+          }
+        }
+
         const response = await this.client!.chat(this.messages, this.options);
         spinner.stop();
 

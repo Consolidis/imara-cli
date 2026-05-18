@@ -6,6 +6,11 @@ import { Keychain } from '../auth/keychain';
 vi.mock('../api/imara-client');
 vi.mock('../auth/keychain');
 vi.mock('../ui/renderer');
+vi.mock('../context/context-builder', () => ({
+  ContextBuilder: {
+    buildSystemPrompt: vi.fn().mockResolvedValue('Mocked System Prompt')
+  }
+}));
 vi.mock('ora', () => ({
   default: vi.fn(() => ({
     start: vi.fn().mockReturnThis(),

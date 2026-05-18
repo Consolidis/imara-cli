@@ -76,6 +76,8 @@ export function isRetriableError(error: unknown, config: Required<RetryConfig> =
     /econnreset/i,
     /etimedout/i,
     /ehostunreach/i,
+    /fetch\s*failed/i,
+    /undici/i,
   ];
 
   if (networkPatterns.some(p => p.test(lowerMsg))) {
