@@ -22,6 +22,10 @@ export async function confirmAction(message: string): Promise<'yes' | 'no' | 'al
     return answer as 'yes' | 'no' | 'always';
   } catch {
     return 'no';
+  } finally {
+    if (process.stdin.isPaused()) {
+      process.stdin.resume();
+    }
   }
 }
 
@@ -45,6 +49,10 @@ export async function promptLoopResolution(message: string): Promise<'continue' 
     return answer as 'continue' | 'pause';
   } catch {
     return 'pause';
+  } finally {
+    if (process.stdin.isPaused()) {
+      process.stdin.resume();
+    }
   }
 }
 

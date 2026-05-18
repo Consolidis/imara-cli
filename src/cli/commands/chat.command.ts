@@ -519,6 +519,7 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
 
       isProcessing = true;
       try {
+        rl.pause();
         await agent.run(input);
 
         // Auto-save history after each successful interaction
@@ -541,6 +542,10 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         }
       } finally {
         isProcessing = false;
+        if (process.stdin.isPaused()) {
+          process.stdin.resume();
+        }
+        rl.resume();
       }
       rl.prompt();
     });
@@ -549,6 +554,7 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
     if (initialPrompt) {
       isProcessing = true;
       try {
+        rl.pause();
         // Small delay to let the UI settle
         await new Promise(resolve => setTimeout(resolve, 500));
         console.log(`${chalk.hex(theme.muted)('›')} ${chalk.gray(initialPrompt)}`);
@@ -571,6 +577,10 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         console.error(chalk.red(`\nErreur initialisation: ${errMsg}`));
       } finally {
         isProcessing = false;
+        if (process.stdin.isPaused()) {
+          process.stdin.resume();
+        }
+        rl.resume();
         rl.prompt();
       }
     }
