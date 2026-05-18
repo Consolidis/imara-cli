@@ -13,6 +13,7 @@ import { ReadMultipleFilesTool } from './read-multiple-files.tool';
 import { WebSearchTool } from './web-search.tool';
 import { ReplaceInFileTool } from './replace-in-file.tool';
 import { ReadFileRangeTool } from './read-file-range.tool';
+import { InspectFileTool } from './inspect-file.tool';
 import { CodeMapTool } from './code-map.tool';
 import { GitDiffTool } from './git-diff.tool';
 import { ClearContextTool } from './clear-context.tool';
@@ -25,8 +26,8 @@ export const TOOLS_DEFINITIONS: ToolDefinition[] = [
   ReadFileTool.definition, WriteFileTool.definition, AppendFileTool.definition,
   ListDirectoryTool.definition, RunCommandTool.definition, SearchFilesTool.definition,
   ReadMultipleFilesTool.definition, WebSearchTool.definition, ReplaceInFileTool.definition,
-  ReadFileRangeTool.definition, CodeMapTool.definition, GitDiffTool.definition,
-  ClearContextTool.definition, ConductorCreateTrackTool.definition,
+  ReadFileRangeTool.definition, InspectFileTool.definition, CodeMapTool.definition,
+  GitDiffTool.definition, ClearContextTool.definition, ConductorCreateTrackTool.definition,
   ConductorUpdatePlanTool.definition, ConductorArchiveTrackTool.definition,
   ConductorValidatePlanTool.definition
 ];
@@ -58,6 +59,8 @@ export class ToolExecutor {
           return ok(await ReplaceInFileTool.run(args as { path: string; old_text: string; new_text: string }));
         case 'read_file_range':
           return ok(await ReadFileRangeTool.run(args as { path: string; start_line?: number; end_line: number }));
+        case 'inspect_file':
+          return ok(await InspectFileTool.run(args as { path: string; query?: string }));
         case 'code_map':
           return ok(await CodeMapTool.run(args as { path: string }));
         case 'git_diff':

@@ -80,6 +80,7 @@ Pour les grands projets, utilise ces stratégies pour économiser tes tokens :
 OUTILS DISPONIBLES :
 - read_file : Lire le contenu d'un fichier complet
 - read_file_range : Lire une plage spécifique de lignes (recommandé pour les gros fichiers)
+- inspect_file : Inspecter un fichier pour obtenir ses métadonnées (nombre de lignes, taille) et optionnellement y chercher un terme
 - code_map : Extraire les signatures (classes, fonctions) d'un fichier sans le corps
 - write_file : Créer ou remplacer un fichier (max 50 lignes !)
 - append_file : Ajouter du contenu à la fin d'un fichier (max 50 lignes !)
