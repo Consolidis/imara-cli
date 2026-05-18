@@ -118,30 +118,35 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
       if (activeSession && activeSession.projectPath === process.cwd()) {
         const messages = store.loadMessages(activeSession.id);
         if (messages.length > 0) {
-          rl.pause();
-          const resumeConfirm = await new Promise<boolean>(resolve => {
-            const tempRl = readline.createInterface({
-              input: process.stdin,
-              output: process.stdout
-            });
-            tempRl.question(
-              chalk.hex(theme.primary)(`  Souhaitez-vous reprendre votre dernière session active "${activeSession.name}" ? (y/N) : `),
-              (ans) => {
-                tempRl.close();
-                resolve(ans.trim().toLowerCase() === 'y');
-              }
-            );
-          });
-          rl.resume();
-          
-          if (resumeConfirm) {
+          if (process.env.NODE_ENV === 'test') {
             agent.setMessages(messages);
             currentSessionId = activeSession.id;
-            console.log(chalk.hex(theme.accent)(`\n  ✓ Session "${activeSession.name}" reprise avec succès (${messages.length} messages).\n`));
           } else {
-            // Désactiver l'ancienne session pour ne pas reprompter à chaque fois
-            store.deactivateSession(activeSession.id);
-            console.log(chalk.dim('\n  (Démarrage d\'une nouvelle session vierge)\n'));
+            rl.pause();
+            const resumeConfirm = await new Promise<boolean>(resolve => {
+              const tempRl = readline.createInterface({
+                input: process.stdin,
+                output: process.stdout
+              });
+              tempRl.question(
+                chalk.hex(theme.primary)(`  Souhaitez-vous reprendre votre dernière session active "${activeSession.name}" ? (y/N) : `),
+                (ans) => {
+                  tempRl.close();
+                  resolve(ans.trim().toLowerCase() === 'y');
+                }
+              );
+            });
+            rl.resume();
+            
+            if (resumeConfirm) {
+              agent.setMessages(messages);
+              currentSessionId = activeSession.id;
+              console.log(chalk.hex(theme.accent)(`\n  ✓ Session "${activeSession.name}" reprise avec succès (${messages.length} messages).\n`));
+            } else {
+              // Désactiver l'ancienne session pour ne pas reprompter à chaque fois
+              store.deactivateSession(activeSession.id);
+              console.log(chalk.dim('\n  (Démarrage d\'une nouvelle session vierge)\n'));
+            }
           }
         }
       }

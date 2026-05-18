@@ -4,10 +4,7 @@ import * as os from 'os';
 import { Message } from '../agent/agent.types';
 import { getStorage } from '../storage/index.js';
 
-const SESSIONS_DIR = path.join(os.homedir(), '.imara', 'sessions');
-const PENDING_SUFFIX = '.pending';
 const FLUSH_INTERVAL_MS = 2000;
-const COMPRESS_THRESHOLD_BYTES = 100_000;
 
 export class SessionManager {
   private sessionId: string;
@@ -67,51 +64,10 @@ export class SessionManager {
           return;
         }
       } catch (error) {
-        // Fallback to legacy JSON on DB load errors
+        // Ignore DB load errors, fallback to empty array
       }
     }
-
-    // Legacy JSON loading fallback/backup
-    const filePath = path.join(SESSIONS_DIR, `${this.sessionId}.json`);
-    if (!fs.existsSync(filePath)) {
-      this.messages = [];
-      return;
-    }
-    try {
-      this.messages = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-
-      // If SQLite provider is available, back-populate the session
-      if (provider) {
-        try {
-          provider.createSession({
-            id: this.sessionId,
-            name: `Session ${new Date().toLocaleDateString()}`,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            projectPath: process.cwd(),
-            isActive: true
-          });
-          this.messages.forEach((msg, idx) => {
-            provider.addMessage({
-              sessionId: this.sessionId,
-              role: msg.role,
-              content: msg.content,
-              timestamp: Date.now() + idx,
-              tokenCount: 0,
-              metadata: {
-                tool_calls: msg.tool_calls,
-                tool_call_id: msg.tool_call_id,
-                name: msg.name
-              }
-            });
-          });
-        } catch {
-          // Ignore population errors
-        }
-      }
-    } catch {
-      this.messages = [];
-    }
+    this.messages = [];
   }
 
   private scheduleFlush() {
@@ -171,36 +127,7 @@ export class SessionManager {
       }
     }
 
-    // Save to legacy JSON backup in parallel
-    try {
-      if (!fs.existsSync(SESSIONS_DIR)) {
-        fs.mkdirSync(SESSIONS_DIR, { recursive: true });
-      }
-
-      const filePath = path.join(SESSIONS_DIR, `${this.sessionId}.json`);
-
-      // Compression backup
-      if (fs.existsSync(filePath)) {
-        const stat = fs.statSync(filePath);
-        if (stat.size > COMPRESS_THRESHOLD_BYTES) {
-          const archivePath = path.join(
-            SESSIONS_DIR,
-            `${this.sessionId}_${Date.now()}.json`
-          );
-          fs.renameSync(filePath, archivePath);
-        }
-      }
-
-      const pendingPath = filePath + PENDING_SUFFIX;
-      const payload = JSON.stringify(this.messages, null, 2);
-
-      fs.writeFileSync(pendingPath, payload, 'utf-8');
-      fs.renameSync(pendingPath, filePath);
-    } catch {
-      // Ignorer silencieusement les erreurs IO en arriere-plan
-    } finally {
-      this.flushing = false;
-      this.flushTimer = null;
-    }
+    this.flushing = false;
+    this.flushTimer = null;
   }
 }
