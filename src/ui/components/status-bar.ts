@@ -28,11 +28,7 @@ export function renderStatusBar(state: StatusState): void {
 
   // 1. Erase previous bar if active
   if (isStatusBarActive && lastLineCount > 0) {
-    process.stdout.write('\x1b[s'); // Save cursor position
-    for (let i = 0; i < lastLineCount; i++) {
-      process.stdout.write('\n\x1b[2K'); // Move down and clear line
-    }
-    process.stdout.write('\x1b[u'); // Restore cursor position
+    process.stdout.write(`\x1b[${lastLineCount}B\r\x1b[2K\x1b[${lastLineCount}A\r`);
   }
 
   // 2. Format network pastille
@@ -74,12 +70,10 @@ export function renderStatusBar(state: StatusState): void {
 
   const bar = chalk.bgHex(theme.bg)(chalk.hex(theme.muted)(` ${line} `));
 
-  // 3. Print the bar below the prompt and restore cursor
-  process.stdout.write('\x1b[s'); // Save cursor position
-  process.stdout.write(`\n${bar}\n`); // Draw on lines below
-  lastLineCount = 2; // Blank line + bar line
+  // 3. Print the bar below the prompt and restore cursor relatively
+  process.stdout.write(`\x1b[1B\x1b[2K\r${bar}\x1b[1A\r`);
+  lastLineCount = 1;
   isStatusBarActive = true;
-  process.stdout.write('\x1b[u'); // Restore cursor position to the input prompt line
 }
 
 /**
@@ -87,9 +81,7 @@ export function renderStatusBar(state: StatusState): void {
  */
 export function clearStatusBar(): void {
   if (isStatusBarActive && lastLineCount > 0) {
-    process.stdout.write('\x1b[s'); // Save cursor
-    process.stdout.write('\n\x1b[J'); // Move to the next line and clear to bottom of viewport
-    process.stdout.write('\x1b[u'); // Restore cursor
+    process.stdout.write(`\x1b[${lastLineCount}B\r\x1b[2K\x1b[${lastLineCount}A\r`);
     lastLineCount = 0;
     isStatusBarActive = false;
   }

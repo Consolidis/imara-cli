@@ -53,4 +53,28 @@ describe('Client Resilience & Cache Fallback', () => {
     // Clear persistence cache for the test
     (client as any).cache.clear();
   });
+
+  it('should parse raw embedded tool calls from content as a fallback', async () => {
+    const client = new ImaraClient('test-key');
+    const messages: Message[] = [{ role: 'user', content: 'test embedded tool call' }];
+    const fakeRawResponse = {
+      content: 'I will list the directory first. list_directory:0<|tool_call_argument_begin|>{"path": ".imara", "recursive": true}<|tool_call_end|><|tool_calls_section_end|>',
+      finishReason: 'stop',
+      toolCalls: [],
+      usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20, costFcfa: 0.1 }
+    };
+
+    vi.spyOn(fetchModule, 'fetchWithTimeout').mockResolvedValue({
+      ok: true,
+      json: async () => fakeRawResponse,
+    } as Response);
+
+    const res = await client.chat(messages, { model: 'flash', maxTokens: 100 });
+
+    expect(res.finishReason).toBe('tool_calls');
+    expect(res.toolCalls).toHaveLength(1);
+    expect(res.toolCalls[0].name).toBe('list_directory');
+    expect(res.toolCalls[0].arguments).toEqual({ path: '.imara', recursive: true });
+    expect(res.content).toBe('I will list the directory first.');
+  });
 });

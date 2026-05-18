@@ -134,6 +134,38 @@ export class ImaraClient {
 
           const data = await response.json() as AgentResponse;
 
+          // Robust Fallback: Parse raw embedded tool call tokens in response content (génération brute)
+          if (data.content && (!data.toolCalls || data.toolCalls.length === 0)) {
+            const regex = /([a-zA-Z0-9_-]+):(\d+)<\|tool_call_argument_begin\|>([\s\S]*?)<\|tool_call_end\|>(?:<\|tool_calls_section_end\|>)?/g;
+            const matches = [...data.content.matchAll(regex)];
+            if (matches.length > 0) {
+              data.toolCalls = data.toolCalls || [];
+              for (const match of matches) {
+                const name = match[1];
+                const id = match[2];
+                const argsText = match[3].trim();
+                let args = {};
+                try {
+                  args = JSON.parse(argsText);
+                } catch {
+                  try {
+                    const cleaned = argsText.replace(/'/g, '"');
+                    args = JSON.parse(cleaned);
+                  } catch {
+                    args = { raw: argsText };
+                  }
+                }
+                data.toolCalls.push({
+                  id: `embedded_${name}_${id}`,
+                  name,
+                  arguments: args
+                });
+              }
+              data.finishReason = 'tool_calls';
+              data.content = data.content.replace(regex, '').trim();
+            }
+          }
+
           if (getDebugMode()) {
             console.error(`\x1b[36m[IMARA_DEBUG] Response: ${JSON.stringify(data, null, 2)}\x1b[0m`);
           }
