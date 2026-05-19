@@ -2,5 +2,4 @@ node_modules/
 dist/
 .env
 .env.local
-*.tsbuildinfo
-
+.imara/index-cache.json
