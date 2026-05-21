@@ -60,7 +60,17 @@ describe('SessionSummary', () => {
       { role: 'assistant', content: 'reponse' },
     ];
     const summary = SessionSummary.summarize(messages);
-    expect(summary.length).toBeLessThan(300);
+    expect(summary).not.toContain('a'.repeat(200));
+    expect(summary.length).toBeLessThan(600);
+  });
+
+  it('should extract touched file paths from tool messages', () => {
+    const messages: Message[] = [
+      { role: 'user', content: 'Corrige src/agent/agent.ts' },
+      { role: 'tool', tool_call_id: '1', name: 'read_file', content: '--- src/agent/agent.ts ---\nexport class Agent {}' },
+    ];
+    const summary = SessionSummary.summarize(messages);
+    expect(summary).toContain('agent.ts');
   });
 
   it('should compute multi-exchange stats', () => {

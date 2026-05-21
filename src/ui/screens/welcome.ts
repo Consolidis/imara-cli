@@ -1,4 +1,3 @@
-// src/ui/screens/welcome.ts
 import chalk from 'chalk';
 import { theme } from '../theme';
 import { getVersion } from '../../utils/version';
@@ -8,6 +7,7 @@ export function isNativeModel(modelName: string): boolean {
   return nativeList.includes(modelName.toLowerCase());
 }
 
+/** Minimal welcome — Claude Code–inspired, low noise. */
 export function renderWelcome(config: {
   model: string;
   projectName: string;
@@ -15,42 +15,32 @@ export function renderWelcome(config: {
   mode: string;
 }): void {
   console.clear();
-  
-  // High-fidelity spaced ASCII banner
-  console.log(chalk.hex(theme.primary).bold(`
-   ___  __  __   _   ___   _      ___  ___  ___  ___ 
-  |_ _| | \\/ |  / \\ | _ \\ / \\    / __|/ _ \\|   \\| __|
-   | |  | |\\/| |/ _ \\|   // _ \\  | (__| (_) | |) | _| 
-  |___| |_|  |_/_/ \\_\\_|_n_/ \\_\\  \___|\\___/|___/|___|`));
 
-  console.log(chalk.hex(theme.muted)(`  Engineering Intelligence · v${getVersion()}\n`));
+  console.log(
+    chalk.hex(theme.primary).bold('  IMARA') +
+      chalk.hex(theme.muted)(`  v${getVersion()}  ·  `) +
+      chalk.hex(theme.text)(config.projectName) +
+      chalk.hex(theme.muted)(` (${config.projectType})`)
+  );
 
-  // Compact session bar
-  const sessionLine = [
-    chalk.hex(theme.secondary)('◆'),
-    chalk.hex(theme.muted)('Modèle'),
-    chalk.hex(theme.primary).bold(config.model.toUpperCase()),
-    chalk.hex(theme.muted)('·'),
-    chalk.hex(theme.accent).bold(config.projectName),
-    chalk.hex(theme.muted)(`(${config.projectType})`),
-    chalk.hex(theme.muted)('·'),
-    chalk.hex(theme.muted)('Mode'),
-    chalk.hex(theme.secondary)(config.mode),
-  ].join(' ');
+  console.log(
+    '  ' +
+      chalk.hex(theme.muted)('model ') +
+      chalk.hex(theme.secondary).bold(config.model.toUpperCase()) +
+      chalk.hex(theme.muted)('  ·  ') +
+      chalk.hex(theme.muted)(config.mode) +
+      chalk.hex(theme.muted)('  ·  ') +
+      chalk.hex(theme.muted)('Ctrl+C interrupt  ·  /help')
+  );
 
-  console.log('  ' + sessionLine);
-  console.log(chalk.hex(theme.muted)('  ' + '─'.repeat(58)));
-  console.log(chalk.hex(theme.muted)(`  💡 Astuce : Changez de modèle à tout moment en tapant : ${chalk.hex(theme.accent)('/model <nom>')}`));
-
-  // Dynamic non-native model notification panel
   if (!isNativeModel(config.model)) {
-    console.log(chalk.hex(theme.warning).bold('\n  ┌────────────────────────────────────────────────────────┐'));
-    console.log(chalk.hex(theme.warning).bold('  │ ⚠️  MODÈLE NON-NATIF ACTIF                              │'));
-    console.log(chalk.hex(theme.warning).bold('  ├────────────────────────────────────────────────────────┤'));
-    console.log(chalk.hex(theme.warning).bold('  │ • Un coût fixe de 5.00 FCFA est débité par requête.    │'));
-    console.log(chalk.hex(theme.warning).bold('  │ • Assurez-vous d\'avoir des fonds suffisants.            │'));
-    console.log(chalk.hex(theme.warning).bold('  └────────────────────────────────────────────────────────┘\n'));
-  } else {
-    console.log('');
+    console.log(
+      chalk.hex(theme.warning)(
+        '  ⚠ Modèle non-natif : 5.00 FCFA / requête — vérifiez votre solde wallet.'
+      )
+    );
   }
+
+  console.log(chalk.hex(theme.muted)('  ' + '─'.repeat(Math.min(56, (process.stdout.columns || 80) - 4))));
+  console.log('');
 }

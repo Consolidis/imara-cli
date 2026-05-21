@@ -94,24 +94,29 @@ describe('SQLite Storage Integration', () => {
       const cw = new ContextWindow({
         maxTokens: 100,
         warningThreshold: 70,
-        compactThreshold: 85
+        compactThreshold: 85,
+        preserveTailMessages: 2,
       });
 
       const messages: any[] = [
         { role: 'system', content: 'You are an assistant' },
         { role: 'user', content: 'Explain quantum computing in one sentence.' },
         { role: 'assistant', content: 'It uses quantum bits to perform calculations.' },
+        { role: 'tool', tool_call_id: 't1', name: 'read_file', content: 'file content sample' },
         { role: 'user', content: 'Explain black holes.' },
-        { role: 'assistant', content: 'They are high density regions in space.' }
+        { role: 'assistant', content: 'They are high density regions in space.' },
+        { role: 'user', content: 'What is dark matter?' },
+        { role: 'assistant', content: 'Matter we cannot see directly.' },
       ];
 
       const compacted = cw.compact(messages, sessionId);
-      
-      expect(compacted.some(m => m.content.includes('RESUME DES ECHANGES PRECEDENTS'))).toBe(true);
+
+      expect(compacted.length).toBeLessThan(messages.length);
 
       const latestSummary = db?.getLatestSummary(sessionId);
       expect(latestSummary).toBeDefined();
       expect(latestSummary?.content).toBeDefined();
+      expect(latestSummary?.content.length).toBeGreaterThan(0);
       expect(latestSummary?.version).toBe(1);
     });
   });

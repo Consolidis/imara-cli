@@ -7,12 +7,12 @@ import { showDiff } from '../../ui/diff-renderer';
 export class WriteFileTool {
   static definition: ToolDefinition = {
     name: 'write_file',
-    description: 'Créer un nouveau fichier ou écraser un fichier existant. STRICTEMENT INTERDIT DE DÉPASSER 50 LIGNES ! Pour un gros fichier, utiliser write_file pour les 50 premières lignes, puis append_file pour le reste.',
+    description: 'Créer un nouveau fichier ou écraser un fichier existant. Pour les très gros fichiers (>150 lignes), découper en sections avec append_file.',
     parameters: {
       type: 'object',
       properties: {
         path: { type: 'string', description: 'Le chemin du fichier' },
-        content: { type: 'string', description: 'Le contenu à écrire. MAX 50 LIGNES STRICTEMENT. Ne jamais essayer d\'écrire un fichier complet ici s\'il est long.' }
+        content: { type: 'string', description: 'Le contenu à écrire. Pour les fichiers volumineux, préférer write_file + append_file par sections (~150 lignes).' }
       },
       required: ['path', 'content']
     }

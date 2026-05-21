@@ -1,5 +1,35 @@
 import chalk from 'chalk';
 import { theme } from './theme';
+import { buildToolConfirmContent, formatConfirmFooter } from './tool-labels';
+
+export async function confirmDangerousTool(
+  name: string,
+  args: Record<string, unknown>
+): Promise<'yes' | 'no' | 'always'> {
+  if (process.env.NODE_ENV === 'test') {
+    return 'yes';
+  }
+
+  const { headline, body, kind } = buildToolConfirmContent(name, args);
+  const footer = formatConfirmFooter(name, args);
+
+  process.stdout.write('\n');
+  if (kind === 'shell' && body) {
+    process.stdout.write(chalk.hex(theme.warning)('  ⚠ ') + chalk.hex(theme.muted)(headline) + '\n');
+    process.stdout.write(chalk.hex(theme.accent)('  $ ') + chalk.hex(theme.text)(body) + '\n');
+    if (footer) {
+      process.stdout.write(chalk.hex(theme.muted)(`  ${footer}\n`));
+    }
+    process.stdout.write('\n');
+  } else if (body) {
+    process.stdout.write(chalk.hex(theme.warning)('  ⚠ ') + chalk.hex(theme.muted)(headline) + '\n');
+    process.stdout.write(chalk.hex(theme.text)(`  ${body}\n`));
+    if (footer) process.stdout.write(chalk.hex(theme.muted)(`  ${footer}\n`));
+    process.stdout.write('\n');
+  }
+
+  return confirmAction(headline);
+}
 
 export async function confirmAction(message: string): Promise<'yes' | 'no' | 'always'> {
   if (process.env.NODE_ENV === 'test') {

@@ -27,7 +27,7 @@ describe('Optimization Tools', () => {
     });
 
     it('should throw if range is too large', async () => {
-      await expect(ReadFileRangeTool.run({ path: 'test.txt', start_line: 1, end_line: 2000 }))
+      await expect(ReadFileRangeTool.run({ path: 'test.txt', start_line: 1, end_line: 2500 }))
         .rejects.toThrow('Plage trop grande');
     });
   });
@@ -72,7 +72,7 @@ describe('Optimization Tools', () => {
   });
 
   describe('ClearContextTool', () => {
-    it('should clear history but keep system and first user message', async () => {
+    it('should clear history but keep system and all user messages', async () => {
       const mockMessages = [
         { role: 'system', content: 'system' },
         { role: 'user', content: 'initial task' },
@@ -87,10 +87,11 @@ describe('Optimization Tools', () => {
       };
 
       const result = await ClearContextTool.run({ reason: 'test' }, mockAgent);
-      expect(result).toContain('Historique vidé avec succès');
+      expect(result).toContain('Historique allégé');
       expect(mockAgent.setMessages).toHaveBeenCalledWith([
         { role: 'system', content: 'system' },
-        { role: 'user', content: 'initial task' }
+        { role: 'user', content: 'initial task' },
+        { role: 'user', content: 'next task' },
       ]);
     });
   });

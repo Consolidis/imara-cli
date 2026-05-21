@@ -1,45 +1,41 @@
-// src/ui/components/tool-call.ts
 import chalk from 'chalk';
 import { theme } from '../theme';
+import { formatToolAction } from '../tool-labels';
 
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 let spinnerIndex = 0;
 let spinnerInterval: ReturnType<typeof setInterval> | null = null;
+let currentLabel = '';
+
+function clearSpinnerLine(): void {
+  process.stdout.write('\r' + ' '.repeat(process.stdout.columns || 80) + '\r');
+}
 
 export function showToolCall(name: string, args: Record<string, unknown>, durationMs?: number): void {
-  const icon = toolIcon(name);
-  const label = toolLabel(name, args);
-  const duration = durationMs ? chalk.hex(theme.muted)(` ${durationMs}ms`) : '';
-
-  // Stop any running spinner before writing final result
   if (spinnerInterval) {
     clearInterval(spinnerInterval);
     spinnerInterval = null;
   }
 
-  const line = `  ${icon} ${chalk.hex(theme.muted)(label)}${duration}`;
+  const action = formatToolAction(name, args);
+  const check = chalk.hex(theme.accent)('✓');
+  const duration = durationMs ? chalk.hex(theme.muted)(` · ${durationMs}ms`) : '';
 
-  // Clear current line and write (using \r to allow overwrite)
-  process.stdout.write('\r' + ' '.repeat(process.stdout.columns || 80) + '\r');
-  process.stdout.write(line);
-
-  if (durationMs) {
-    process.stdout.write('\n'); // New line only after result is in
-  }
+  clearSpinnerLine();
+  process.stdout.write(`  ${check} ${chalk.hex(theme.muted)(action)}${duration}\n`);
 }
 
 export function startToolCallSpinner(name: string, args: Record<string, unknown>): void {
   if (spinnerInterval) clearInterval(spinnerInterval);
 
-  const label = toolLabel(name, args);
+  currentLabel = formatToolAction(name, args);
   spinnerIndex = 0;
 
   const tick = () => {
     const frame = chalk.hex(theme.warning)(SPINNER_FRAMES[spinnerIndex % SPINNER_FRAMES.length]);
-    const line = `  ${frame} ${chalk.hex(theme.muted)(label)}`;
-    process.stdout.write('\r' + ' '.repeat(process.stdout.columns || 80) + '\r');
-    process.stdout.write(line);
+    clearSpinnerLine();
+    process.stdout.write(`  ${frame} ${chalk.hex(theme.muted)(currentLabel)}`);
     spinnerIndex++;
   };
 
@@ -51,36 +47,6 @@ export function stopToolCallSpinner(): void {
   if (spinnerInterval) {
     clearInterval(spinnerInterval);
     spinnerInterval = null;
-    process.stdout.write('\r' + ' '.repeat(process.stdout.columns || 80) + '\r');
-  }
-}
-
-function toolIcon(name: string): string {
-  const icons: Record<string, string> = {
-    read_file: '○',
-    write_file: '●',
-    list_directory: '◎',
-    run_command: '▶',
-    search_files: '◈',
-    web_search: '◉',
-  };
-  return chalk.hex(theme.muted)(icons[name] ?? '○');
-}
-
-function toolLabel(name: string, args: Record<string, unknown>): string {
-  const getPath = (a: Record<string, unknown>) => String(a.path || a.file_path || a.filepath || a.filename || '');
-  const getQuery = (a: Record<string, unknown>) => String(a.query || a.search || a.q || '');
-  const getCmd = (a: Record<string, unknown>) => String(a.command || a.cmd || a.args || '');
-  const getPattern = (a: Record<string, unknown>) => String(a.pattern || a.regex || a.search || '');
-
-  switch (name) {
-    case 'read_file': return `Lecture · ${getPath(args)}`;
-    case 'write_file': return `Écriture · ${getPath(args)}`;
-    case 'list_directory': return `Exploration · ${getPath(args) || 'racine'}`;
-    case 'run_command': return `Exécution · ${getCmd(args)}`;
-    case 'search_files': return `Recherche · "${getPattern(args)}"`;
-    case 'read_multiple_files': return `Lecture multiple · ${((args.paths as string[] | undefined) || []).length} fichier(s)`;
-    case 'web_search': return `Web · ${getQuery(args)}`;
-    default: return name;
+    clearSpinnerLine();
   }
 }

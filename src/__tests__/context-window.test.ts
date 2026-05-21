@@ -69,16 +69,18 @@ describe('ContextWindow', () => {
     });
 
     it('should compact with summary message', () => {
-      const cw = new ContextWindow({ maxTokens: 200, warningThreshold: 50, compactThreshold: 85 });
+      const cw = new ContextWindow({ maxTokens: 200, warningThreshold: 50, compactThreshold: 85, preserveTailMessages: 2 });
       const msgs: Message[] = [
         { role: 'system', content: 'System prompt' },
         { role: 'user', content: 'Question 1' },
         { role: 'assistant', content: 'Reponse 1 detaillee' },
+        { role: 'tool', tool_call_id: 't1', name: 'read_file', content: 'fichier lu' },
         { role: 'user', content: 'Question 2' },
         { role: 'assistant', content: 'Reponse 2 detaillee' },
+        { role: 'user', content: 'Question 3' },
+        { role: 'assistant', content: 'Reponse 3 detaillee' },
       ];
       const result = cw.compact(msgs);
-      // Doit contenir system + summary + 2 derniers messages
       expect(result.length).toBeLessThan(msgs.length);
       expect(result.find(m => m.content.startsWith('RESUME'))).toBeDefined();
     });

@@ -13,6 +13,9 @@ export interface ConfigSchema {
   maxTokens: number;
   contextWindow: number;
   contextDepth: number;
+  contextPreserveMessages: number;
+  maxWriteLines: number;
+  maxFullFileReadsPerTurn: number;
   verbose: boolean;
   theme: string;
   offline: boolean;
@@ -34,17 +37,20 @@ export const DEFAULT_CONFIG: ConfigSchema = {
   defaultModel: 'zuri',
   language: 'fr',
   temperature: 0.7,
-  maxTokens: 16384,
-  contextWindow: 32768,
-  contextDepth: 2,
+  maxTokens: 216384,
+  contextWindow: 232768,
+  contextDepth: 4,
+  contextPreserveMessages: 32,
+  maxWriteLines: 150,
+  maxFullFileReadsPerTurn: 8,
   verbose: false,
   theme: 'dark',
   offline: false,
   autoConfirm: false,
   apiBaseUrl: 'https://api.imara.consolidis.com',
   // apiBaseUrl: 'http://localhost:3001',
-  tokenWarningThreshold: 0.7,
-  tokenCompactThreshold: 0.85,
+  tokenWarningThreshold: 0.88,
+  tokenCompactThreshold: 0.96,
   onboardingDone: false,
   persistHistory: true,
   userName: '',

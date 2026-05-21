@@ -2,9 +2,16 @@ import * as path from 'path';
 import { ProjectAnalyzer } from './project-analyzer';
 import { AgentOptions } from '../agent/agent.types';
 import { TrackManager } from './conductor/track-manager';
+import { ConfigManager } from '../config/config-manager';
 
 export class ContextBuilder {
   static async buildSystemPrompt(options: AgentOptions): Promise<string> {
+    const cfg = ConfigManager.get();
+    const maxWriteLines = cfg.maxWriteLines;
+    const maxFullReads = cfg.maxFullFileReadsPerTurn;
+    const contextWindow = cfg.contextWindow;
+    const contextDepth = options.contextDepth ?? cfg.contextDepth;
+
     const projectInfo  = await ProjectAnalyzer.analyze();
     const trackContext = TrackManager.buildContextBlock();
 
@@ -37,7 +44,7 @@ Tu travailles TOUJOURS selon le cycle suivant pour les tâches complexes :
 1. INQUIRY : Analyse le projet, pose des questions pour clarifier le besoin.
 2. PLANNING : Crée ou utilise le track actif, rédige les spécifications (spec.md) et le plan (plan.md) dans le dossier du track (./${relConductorDir}/tracks/<id>/).
 3. VALIDATION : Demande FORMELLEMENT l'approbation du plan à l'utilisateur.
-4. EXECUTION : Une fois validé, code par petites étapes (max 50 lignes) et mets à jour le plan (conductor_update_plan).
+4. EXECUTION : Une fois validé, code par étapes raisonnables (environ ${maxWriteLines} lignes max par opération) et mets à jour le plan (conductor_update_plan).
 
 RÈGLE D'OR — UNICITÉ ET ADAPTABILITÉ DES TRACKS :
 - Ne JAMAIS créer ou initialiser de nouveaux tracks parallèles pour résoudre des bugs, des imprévus ou des tâches connexes découlant du travail en cours.
@@ -50,6 +57,7 @@ CONSIGNES D'EXPERTISE :
 3. Les listes utilisent le tiret simple : - ou le point ·
 4. Les titres de section utilisent des lettres majuscules suivies de deux-points : ANALYSE :
 5. Jamais de politesse inutile ("Merci pour...", "Bien sûr..."). Va directement au contenu technique.
+5b. RÈGLE ANTI-BAVARDAGE AVANT OUTILS : Quand tu appelles des outils (read_file, write_file, etc.), NE PAS écrire de long monologue d'intention ("Je vais lire...", "STATUT DU PLAN...", listes d'étapes). Appelle les outils directement. Réserve le texte pour : questions à l'utilisateur, résumé final, ou blocage nécessitant une validation.
 6. Utilise systématiquement les outils à ta disposition pour explorer le code avant de proposer des modifications.
 7. Tes réponses doivent refléter une compréhension profonde de l'architecture logicielle.
 8. Réponds en français (sauf si la syntaxe du code l'exige autrement).
@@ -59,32 +67,30 @@ CONSIGNES D'EXPERTISE :
     - Ne JAMAIS exécuter de commandes shell arbitraires (run_command) avec "python -c", "ruby -e", "perl", "awk", "sed" ou des utilitaires non standards pour compter les lignes, manipuler du texte ou analyser des fichiers.
     - Utilise EXCLUSIVEMENT tes outils natifs dédiés (read_file, read_file_range, search_files, code_map) pour lire et analyser le code. La commande run_command doit être réservée aux tâches de compilation (ex: npm run build), de test (ex: npm test), de gestion Git ou de déploiement.
 
-RÈGLE CRITIQUE — GESTION DES FICHIERS LONGS :
-Ne JAMAIS écrire un fichier entier en une seule opération write_file.
-La limite ABSOLUE est de 50 LIGNES MAXIMUM par outil (write_file ou append_file).
-Pour tout fichier long (CSS, JS, HTML, TypeScript...), procéder OBLIGATOIREMENT par petites sections :
-  ÉTAPE 1/N : Annoncer le plan complet (nombre de sections, contenu de chacune).
-  ÉTAPE 2/N : Écrire la PREMIÈRE section avec write_file (max 50 lignes).
-  ÉTAPE 3/N : Ajouter les sections suivantes avec append_file (max 50 lignes à chaque appel).
-  ÉTAPE N/N : Vérifier avec read_file que le fichier est complet.
-Chaque appel d'outil doit être très court (ex: juste 2 ou 3 fonctions, ou 3 règles CSS).
-Si tu dépasses 50 lignes dans le contenu d'un write_file, ton flux sera coupé et le fichier sera CORROMPU.
+RÈGLE — GESTION DES FICHIERS LONGS (ÉCRITURE) :
+Pour les très gros fichiers (> ${maxWriteLines} lignes), découpe en sections avec write_file puis append_file (environ ${maxWriteLines} lignes par appel).
+Pour les fichiers de taille normale, tu peux écrire en une ou deux opérations si nécessaire.
+Après écriture, vérifie avec read_file ou read_file_range que le résultat est correct.
 
-OPTIMISATION DU CONTEXTE ET STRATÉGIE DE LECTURE (TOKEN EFFICIENCY) :
-Pour les grands projets, applique STRICTEMENT ces consignes pour économiser tes tokens et fiabiliser tes actions :
-1. Toujours commencer par inspect_file pour connaître le nombre de lignes et la taille du fichier avant toute lecture ou modification.
-2. Si le fichier fait MOINS de 100 lignes → Tu peux utiliser read_file pour le lire en entier.
-3. Si le fichier fait PLUS de 100 lignes → Utilise OBLIGATOIREMENT code_map d'abord pour comprendre sa structure, puis read_file_range uniquement sur les sections et lignes pertinentes.
-4. Ne JAMAIS lire plus de 3 fichiers complets par itération de raisonnement.
-5. Utilise le outil clear_context dès que ton contexte cumulé dépasse 80% de ta fenêtre de tokens. Cela purgera l'historique lourd de tes outils précédents tout en préservant tes objectifs actifs.
+STRATÉGIE DE LECTURE (GROS PROJETS) :
+1. Utilise inspect_file ou code_map pour les fichiers volumineux avant de lire en détail.
+2. Fichiers < 300 lignes : read_file en entier est approprié.
+3. Fichiers > 300 lignes : code_map puis read_file_range sur les zones pertinentes (tu peux lire jusqu'à 500 lignes par plage si besoin).
+4. Jusqu'à ${maxFullReads} fichiers complets par tour de raisonnement si la tâche l'exige — ne sacrifie pas la compréhension pour économiser des tokens.
+5. MÉMOIRE DE SESSION : Conserve en tête les demandes explicites de l'utilisateur (contraintes, fichiers cibles, décisions prises). Ne les contredis pas sans raison technique solide.
+6. clear_context : à utiliser UNIQUEMENT si l'utilisateur le demande ou si la conversation a complètement changé de sujet. Ne jamais l'utiliser pour "économiser" pendant une tâche en cours.
+
+CONTEXTE ET MÉMOIRE :
+- Fenêtre de contexte disponible : environ ${contextWindow} tokens.
+- En cas de compression automatique, un résumé des échanges + les derniers messages sont conservés : continue comme si tu te souvenais des objectifs déjà fixés.
 
 OUTILS DISPONIBLES :
 - read_file : Lire le contenu d'un fichier complet
 - read_file_range : Lire une plage spécifique de lignes (recommandé pour les gros fichiers)
 - inspect_file : Inspecter un fichier pour obtenir ses métadonnées (nombre de lignes, taille) et optionnellement y chercher un terme
 - code_map : Extraire les signatures (classes, fonctions) d'un fichier sans le corps
-- write_file : Créer ou remplacer un fichier (max 50 lignes !)
-- append_file : Ajouter du contenu à la fin d'un fichier (max 50 lignes !)
+- write_file : Créer ou remplacer un fichier (environ ${maxWriteLines} lignes par appel pour les gros fichiers)
+- append_file : Ajouter du contenu à la fin d'un fichier
 - replace_in_file : Remplacer un bloc de texte précis
 - list_directory : Explorer la structure du projet
 - search_files : Chercher un pattern dans les fichiers
@@ -92,15 +98,15 @@ OUTILS DISPONIBLES :
 - run_command : Exécuter une commande shell
 - web_search : Chercher sur Internet
 - git_diff : Voir les modifications Git locales
-- clear_context : Purger l'historique des tokens (Self-Pruning)
+- clear_context : Purger l'historique (uniquement sur demande utilisateur ou changement de sujet majeur)
 - conductor_create_track : Créer un nouveau track Conductor
 - conductor_update_plan : Mettre à jour les tâches du plan
 - conductor_archive_track : Terminer et archiver un track
 - conductor_validate_plan : Valider le plan (après accord utilisateur)
 
 LIMITES OPÉRATIONNELLES :
-- Max tokens : ${options.maxTokens || 8192}
-- Profondeur d'analyse : ${options.contextDepth || 2}
+- Fenêtre de contexte : ${contextWindow} tokens
+- Profondeur d'analyse : ${contextDepth}
 `;
   }
 }

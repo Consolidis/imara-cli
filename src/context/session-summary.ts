@@ -35,8 +35,22 @@ const STATUS_KEYWORDS: Record<Status, RegExp[]> = {
   en_cours: [],
 };
 
-const TOOL_RESULT_TOKEN_THRESHOLD = 500;
-const MAX_TOPIC_LEN = 60;
+const CONSTRAINT_PATTERNS = [
+  /\b(ne\s+pas|n'?apas|jamais|toujours|obligatoire|imp[eé]ratif|strictement|uniquement|exclusivement)\b[^.!?]{0,80}/gi,
+  /\b(il\s+faut|tu\s+dois|vous\s+devez|garder|conserver|pr[eé]server)\b[^.!?]{0,80}/gi,
+];
+
+const FILE_PATH_PATTERN = /(?:^|\s)([\w./\\-]+\.(?:ts|tsx|js|jsx|json|md|css|html|py|go|rs|vue|yml|yaml))\b/gi;
+const FILE_TOOLS = new Set([
+  'read_file', 'read_file_range', 'write_file', 'append_file', 'replace_in_file',
+  'inspect_file', 'code_map', 'smart_read', 'read_multiple_files',
+]);
+
+const TOOL_RESULT_TOKEN_THRESHOLD = 8000;
+const MAX_TOPIC_LEN = 120;
+const MAX_THEMES = 8;
+const MAX_FILES = 12;
+const MAX_CONSTRAINTS = 6;
 
 function quickTokenEstimate(text: string): number {
   return Math.ceil(text.length / 4);
@@ -49,11 +63,26 @@ export class SessionSummary {
     }
 
     const groups = this.groupByIntention(messages);
-    if (groups.length === 0) {
-      return 'Echanges techniques precedents.';
+    const files = this.extractTouchedFiles(messages);
+    const constraints = this.extractUserConstraints(messages);
+
+    const parts: string[] = [];
+
+    if (groups.length > 0) {
+      parts.push(this.buildParagraph(groups));
+    } else {
+      parts.push('Echanges techniques precedents.');
     }
 
-    return this.buildParagraph(groups);
+    if (constraints.length > 0) {
+      parts.push(`Consignes utilisateur a respecter : ${constraints.join(' | ')}`);
+    }
+
+    if (files.length > 0) {
+      parts.push(`Fichiers deja consultes ou modifies : ${files.join(', ')}`);
+    }
+
+    return parts.join('. ') + '.';
   }
 
   private static groupByIntention(messages: Message[]): ExchangeGroup[] {
@@ -79,7 +108,6 @@ export class SessionSummary {
         if (detected !== 'en_cours') latestStatus = detected;
       }
 
-      // Lorsque le prochain message user arrive ou fin de boucle, clore le groupe
       const nextIsNewExchange = i + 1 < messages.length && messages[i + 1].role === 'user';
       const isLast = i === messages.length - 1;
       if ((nextIsNewExchange || isLast) && currentTopic) {
@@ -91,8 +119,71 @@ export class SessionSummary {
       }
     }
 
-    // Deduper les topics identiques consecutifs
     return this.dedupeGroups(groups);
+  }
+
+  private static extractTouchedFiles(messages: Message[]): string[] {
+    const seen = new Set<string>();
+
+    for (const msg of messages) {
+      if (msg.role === 'tool' && msg.name && FILE_TOOLS.has(msg.name)) {
+        const fromContent = this.extractPathsFromText(msg.content);
+        for (const p of fromContent) seen.add(p);
+      }
+      if (msg.role === 'assistant' && msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          try {
+            const args = JSON.parse(tc.function.arguments) as Record<string, unknown>;
+            if (typeof args.path === 'string') seen.add(args.path.replace(/\\/g, '/'));
+            if (Array.isArray(args.paths)) {
+              for (const p of args.paths) {
+                if (typeof p === 'string') seen.add(p.replace(/\\/g, '/'));
+              }
+            }
+          } catch {
+            // ignore malformed tool args
+          }
+        }
+      }
+      if (msg.role === 'user' || msg.role === 'assistant') {
+        for (const p of this.extractPathsFromText(msg.content)) seen.add(p);
+      }
+    }
+
+    return [...seen].slice(0, MAX_FILES);
+  }
+
+  private static extractPathsFromText(text: string): string[] {
+    const paths: string[] = [];
+    let match: RegExpExecArray | null;
+    const re = new RegExp(FILE_PATH_PATTERN.source, FILE_PATH_PATTERN.flags);
+    while ((match = re.exec(text)) !== null) {
+      const p = match[1].replace(/\\/g, '/');
+      if (p.length > 3 && !p.startsWith('http')) paths.push(p);
+    }
+    return paths;
+  }
+
+  private static extractUserConstraints(messages: Message[]): string[] {
+    const constraints: string[] = [];
+    const seen = new Set<string>();
+
+    for (const msg of messages) {
+      if (msg.role !== 'user') continue;
+      for (const pattern of CONSTRAINT_PATTERNS) {
+        const re = new RegExp(pattern.source, pattern.flags);
+        let match: RegExpExecArray | null;
+        while ((match = re.exec(msg.content)) !== null) {
+          const snippet = match[0].replace(/\s+/g, ' ').trim().substring(0, 100);
+          if (snippet.length > 12 && !seen.has(snippet)) {
+            seen.add(snippet);
+            constraints.push(snippet);
+          }
+        }
+      }
+    }
+
+    return constraints.slice(0, MAX_CONSTRAINTS);
   }
 
   private static detectIntention(content: string): Intention {
@@ -135,24 +226,23 @@ export class SessionSummary {
   private static buildParagraph(groups: ExchangeGroup[]): string {
     if (groups.length === 1) {
       const g = groups[0];
-      return `${g.intention}: ${g.topic} (${g.status}).`;
+      return `${g.intention}: ${g.topic} (${g.status})`;
     }
 
     const parts: string[] = [];
+    parts.push(`${groups.length} echanges precedents`);
+    const themes = groups.slice(0, MAX_THEMES).map(g => `${g.intention}:${g.topic}`).join(' | ');
+    if (themes) parts.push(`Themes : ${themes}`);
+
     const intentionCounts: Partial<Record<Intention, number>> = {};
     for (const g of groups) {
       intentionCounts[g.intention] = (intentionCounts[g.intention] || 0) + 1;
     }
-
-    parts.push(`${groups.length} echanges precedents`);
-    const themes = groups.slice(0, 3).map(g => `${g.intention}:${g.topic}`).join(' | ');
-    if (themes) parts.push(`Themes : ${themes}`);
-
     const stats = Object.entries(intentionCounts)
       .map(([k, v]) => `${k}(${v})`)
       .join(' ; ');
     if (stats) parts.push(`Repartition : ${stats}`);
 
-    return parts.join('. ') + '.';
+    return parts.join('. ');
   }
 }

@@ -1,15 +1,16 @@
 // src/ui/theme.ts — Design System Imara CLI
 
+/** Palette proche du terminal Claude Code (tons chauds / neutres). */
 export const palette = {
-  primary:   '#4B8BF5',
-  secondary: '#8AB4F8',
-  accent:    '#81C995',
-  warning:   '#FDD663',
-  error:     '#F28B82',
-  muted:     '#9AA0A6',
-  text:      '#E8EAED',
-  toolBg:    '#1E2A3A',
-  bg:        '#0D1117',
+  primary:   '#D4A574',
+  secondary: '#E8C9A8',
+  accent:    '#7DD3A0',
+  warning:   '#E5C07B',
+  error:     '#E06C75',
+  muted:     '#6B7280',
+  text:      '#E6E6E6',
+  toolBg:    '#1A1A1A',
+  bg:        '#141414',
 } as const;
 
 export const theme = {

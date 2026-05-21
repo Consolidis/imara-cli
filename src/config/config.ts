@@ -8,6 +8,7 @@ export interface ConfigSchema {
   temperature: number;
   maxTokens: number;
   contextWindow: number;
+  contextDepth?: number;
   verbose: boolean;
   theme: string;
   offline: boolean;
@@ -20,8 +21,8 @@ const DEFAULTS: ConfigSchema = {
   baseUrl: 'http://localhost:3001', 
   model: 'imara-zuri',
   temperature: 0.7,
-  maxTokens: 16384, 
-  contextWindow: 32768,
+  maxTokens: 216384, 
+  contextWindow: 232768,
   verbose: false,
   theme: 'dark',
   offline: false,

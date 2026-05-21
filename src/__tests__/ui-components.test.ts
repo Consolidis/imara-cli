@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { theme, palette, color16, wrapText } from '../ui/theme';
-import { renderStatusBar, clearStatusBar } from '../ui/components/status-bar';
+import { renderStatusBar, clearStatusBar, setStatusBarPinned } from '../ui/components/status-bar';
 import { showErrorPanel } from '../ui/components/error-panel';
 import { showToolCall, startToolCallSpinner, stopToolCallSpinner } from '../ui/components/tool-call';
 import { showResponse } from '../ui/components/response';
@@ -36,7 +36,9 @@ describe('UI Components', () => {
   });
 
   it('renderStatusBar should not throw', () => {
+    setStatusBarPinned(true);
     expect(() => renderStatusBar({ model: 'test', tokens: 100, costFcfa: 5.5 })).not.toThrow();
+    setStatusBarPinned(false);
   });
 
   it('clearStatusBar should not throw', () => {

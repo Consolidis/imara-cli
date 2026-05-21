@@ -32,8 +32,8 @@ export class ReadFileTool {
     }
 
     const stats = fs.statSync(fullPath);
-    if (stats.size > 500000) { // 500KB limit
-      throw new Error('Fichier trop volumineux. Utilisez search_files pour extraire des informations spécifiques.');
+    if (stats.size > 1_500_000) {
+      throw new Error('Fichier trop volumineux (>1.5 Mo). Utilisez read_file_range ou code_map.');
     }
 
     return fs.readFileSync(fullPath, 'utf-8');

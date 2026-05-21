@@ -15,7 +15,7 @@ export class AppendFileTool {
       type: 'object',
       properties: {
         path: { type: 'string', description: 'Le chemin du fichier à compléter' },
-        content: { type: 'string', description: 'Le contenu à ajouter à la fin du fichier. MAX 50 LIGNES STRICTEMENT.' }
+        content: { type: 'string', description: 'Le contenu à ajouter à la fin du fichier.' }
       },
       required: ['path', 'content']
     }

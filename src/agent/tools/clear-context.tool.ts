@@ -3,7 +3,7 @@ import { ToolDefinition, Message, AgentProxy } from '../agent.types';
 export class ClearContextTool {
   static definition: ToolDefinition = {
     name: 'clear_context',
-    description: 'Permet à l\'agent de vider son historique de messages pour économiser des tokens. Garde uniquement le prompt système et la demande initiale.',
+    description: 'Réduit l\'historique en cas de changement de sujet majeur. Garde le prompt système et TOUTES les demandes utilisateur. À éviter pendant une tâche en cours — ne pas utiliser pour économiser des tokens.',
     parameters: {
       type: 'object',
       properties: {
@@ -17,13 +17,13 @@ export class ClearContextTool {
 
     const messages = agent.getMessages();
     const systemPrompt = messages.find((m: Message) => m.role === 'system');
-    const firstUserMsg = messages.find((m: Message) => m.role === 'user');
+    const userMessages = messages.filter((m: Message) => m.role === 'user');
 
     const newHistory: Message[] = [];
     if (systemPrompt) newHistory.push(systemPrompt);
-    if (firstUserMsg) newHistory.push(firstUserMsg);
+    newHistory.push(...userMessages);
 
     agent.setMessages(newHistory);
-    return `Historique vidé avec succès. Raison: ${args.reason || 'Optimisation des tokens'}.`;
+    return `Historique allégé (${userMessages.length} demande(s) utilisateur conservée(s)). Raison: ${args.reason || 'Changement de contexte'}.`;
   }
 }

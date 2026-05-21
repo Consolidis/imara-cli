@@ -2,7 +2,9 @@ export { showResponse } from './components/response';
 export { showToolCall, startToolCallSpinner, stopToolCallSpinner } from './components/tool-call';
 export { showIntention } from './components/intention';
 export { showErrorPanel } from './components/error-panel';
-export { renderStatusBar, clearStatusBar, type StatusState } from './components/status-bar';
+export { renderStatusBar, clearStatusBar, setStatusBarPinned, type StatusState } from './components/status-bar';
+export { showUserMessage } from './components/user-message';
+export { uiEvents, type AgentPhase } from './ui-events';
 
 import { showToolCall } from './components/tool-call';
 

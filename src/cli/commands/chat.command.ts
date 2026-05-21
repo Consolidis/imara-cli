@@ -6,7 +6,9 @@ import { ProjectAnalyzer } from '../../context/project-analyzer';
 import { SessionManager } from '../../context/session-manager';
 import { SessionStore } from '../../context/session-store';
 import { theme } from '../../ui/theme';
-import { renderStatusBar, clearStatusBar } from '../../ui/components/status-bar';
+import { renderStatusBar, clearStatusBar, setStatusBarPinned } from '../../ui/components/status-bar';
+import { showUserMessage } from '../../ui/components/user-message';
+import { attachMultilineLineHandler, eraseTerminalLines } from '../../ui/multiline-input';
 import { showErrorPanel } from '../../ui/components/error-panel';
 import { TrackManager } from '../../context/conductor/track-manager';
 import { renderWelcome } from '../../ui/screens/welcome';
@@ -43,7 +45,7 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
-      prompt: chalk.hex(theme.primary)('› ')
+      prompt: chalk.hex(theme.muted)('  ❯ ')
     });
 
     const agent = new Agent({
@@ -158,23 +160,19 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
       }
     }
 
-    console.log(chalk.dim('Tapez /exit pour quitter, /help pour les commandes spéciales.'));
-
-    // Show active track if any
     const active = TrackManager.getActive();
     if (active) {
-      console.log(`\n  ${chalk.hex(theme.primary).bold('📍 TRACK ACTIF')} : ${chalk.hex(theme.accent)(active.id)}`);
-      console.log(`  ${chalk.hex(theme.muted)(active.title)}`);
-      if (!active.validated) {
-        console.log(chalk.hex(theme.warning)('  ⚠ Le plan n\'est pas encore validé. Utilisez /approve pour débloquer le codage.\n'));
-      } else {
-        console.log(chalk.hex(theme.accent)('  ✓ Plan validé. Prêt à coder.\n'));
-      }
-    } else {
-      console.log('');
+      const status = active.validated
+        ? chalk.hex(theme.accent)('validated')
+        : chalk.hex(theme.warning)('plan pending — /approve');
+      console.log(
+        chalk.hex(theme.muted)(`  track `) +
+          chalk.hex(theme.text)(active.id) +
+          chalk.hex(theme.muted)(` · ${active.title} · ${status}`)
+      );
     }
 
-    function printStatus() {
+    function printStatus(idle = !isProcessing) {
       const stats = agent.getSessionStats();
       const track = TrackManager.getActive();
       const ctx = agent.getContextStats();
@@ -183,42 +181,51 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         tokens: stats.tokens,
         costFcfa: stats.cost,
         trackId: track?.id,
-        phase: isProcessing ? 'tool' : 'idle',
+        phase: idle ? 'idle' : undefined,
         contextPercent: ctx.percent,
         contextState: ctx.state,
       });
     }
 
-    // Override rl.prompt to always render status bar dynamically under the prompt
     const originalPrompt = rl.prompt.bind(rl);
     rl.prompt = (preserveCursor?: boolean) => {
-      printStatus();
+      setStatusBarPinned(true);
+      printStatus(true);
       originalPrompt(preserveCursor);
     };
 
+    console.log(
+      chalk.hex(theme.muted)(
+        '  multiligne : coller tout le texte · ou Entrée sur une ligne vide pour envoyer'
+      )
+    );
+
+    setStatusBarPinned(true);
     rl.prompt();
 
     if (process.env.NODE_ENV === 'test') {
       resolve();
     }
 
-    rl.on('line', async (line) => {
+    attachMultilineLineHandler(rl, async (rawInput, echoedLineCount) => {
+      setStatusBarPinned(false);
       clearStatusBar();
 
       if (isProcessing) {
-        console.log(chalk.hex(theme.warning)('  Veuillez patienter, l\'IA réfléchit...'));
+        console.log(chalk.hex(theme.muted)('  · en cours — Ctrl+C pour interrompre'));
         rl.prompt();
         return;
       }
 
-      const input = line.trim();
+      const input = rawInput.trim();
       if (!input) {
         rl.prompt();
         return;
       }
 
       if (process.env.NODE_ENV !== 'test') {
-        process.stdout.write(`\x1b[1A\r\x1b[2K${chalk.hex(theme.muted)('›')} ${chalk.gray(line)}\n`);
+        eraseTerminalLines(echoedLineCount);
+        showUserMessage(rawInput);
       }
 
       if (input === '/exit' || input === '/quit') {
@@ -246,7 +253,7 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         console.log(`    1. ${chalk.bold('Inquiry')}   : Analyse et questions de clarification.`);
         console.log(`    2. ${chalk.bold('Planning')}  : Création automatique d'un track et d'un plan.`);
         console.log(`    3. ${chalk.bold('Approval')}  : L'IA attend votre validation avant de coder.`);
-        console.log(`    4. ${chalk.bold('Execution')} : Codage par itérations sécurisées (max 50 lignes).\n`);
+        console.log(`    4. ${chalk.bold('Execution')} : Codage par itérations raisonnables (sections modulaires).\n`);
 
         console.log(chalk.hex(theme.primary).bold('  ASTUCE :'));
         console.log('    Si l\'IA est bloquée par un guardrail, validez simplement le plan en disant :');
@@ -532,6 +539,7 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
       }
 
       isProcessing = true;
+      setStatusBarPinned(false);
       try {
         rl.pause();
         await agent.run(input);
@@ -571,7 +579,7 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         rl.pause();
         // Small delay to let the UI settle
         await new Promise(resolve => setTimeout(resolve, 500));
-        console.log(`${chalk.hex(theme.muted)('›')} ${chalk.gray(initialPrompt)}`);
+        showUserMessage(initialPrompt);
         await agent.run(initialPrompt);
 
         // Auto-save initial prompt interaction

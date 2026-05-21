@@ -1,23 +1,16 @@
-// src/ui/components/response.ts
 import chalk from 'chalk';
 import { theme, wrapText } from '../theme';
 
+/** Assistant reply — clean prose block (Claude Code–style, minimal chrome). */
 export function showResponse(text: string): void {
-  if (!text) return;
-  console.log(''); // Empty line before
-  
-  // Prefix IMARA stylized on the first line
-  const prefix = chalk.hex(theme.primary).bold('IMARA') + 
-                 chalk.hex(theme.muted)(' ›') + ' ';
-  
-  const lines = wrapText(text, 76);
-  lines.forEach((line, i) => {
-    if (i === 0) {
-      console.log(prefix + chalk.hex(theme.text)(line));
-    } else {
-      console.log('        ' + chalk.hex(theme.text)(line)); // Aligned with text
-    }
-  });
-  
-  console.log(''); // Empty line after
+  if (!text?.trim()) return;
+
+  const width = Math.min(78, (process.stdout.columns || 80) - 4);
+  const lines = wrapText(text.trim(), width);
+
+  process.stdout.write('\n');
+  for (const line of lines) {
+    process.stdout.write('  ' + chalk.hex(theme.text)(line) + '\n');
+  }
+  process.stdout.write('\n');
 }

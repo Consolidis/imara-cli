@@ -39,9 +39,9 @@ export class ReadFileRangeTool {
     if (start < 1) throw new Error('start_line doit être >= 1');
     if (end < start) throw new Error('end_line doit être >= start_line');
     
-    // Safety limit to prevent context overflow (e.g., 1000 lines)
-    if (end - start > 1000) {
-      throw new Error('Plage trop grande (max 1000 lignes). Veuillez lire le fichier par morceaux plus petits.');
+    // Safety limit to prevent context overflow
+    if (end - start > 2000) {
+      throw new Error('Plage trop grande (max 2000 lignes). Veuillez lire le fichier par morceaux plus petits.');
     }
 
     const content = fs.readFileSync(fullPath, 'utf-8');

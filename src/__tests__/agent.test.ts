@@ -7,8 +7,9 @@ vi.mock('../api/imara-client');
 vi.mock('../auth/keychain');
 vi.mock('../ui/renderer');
 vi.mock('../ui/confirm', () => ({
+  confirmDangerousTool: vi.fn().mockResolvedValue('yes'),
   confirmAction: vi.fn().mockResolvedValue('yes'),
-  promptLoopResolution: vi.fn().mockResolvedValue('pause')
+  promptLoopResolution: vi.fn().mockResolvedValue('pause'),
 }));
 vi.mock('../context/context-builder', () => ({
   ContextBuilder: {

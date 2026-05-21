@@ -3,13 +3,13 @@ import { ImaraClient } from '../api/imara-client';
 import { Keychain } from '../auth/keychain';
 import { ToolExecutor } from './tools';
 import { ContextBuilder } from '../context/context-builder';
-import { showResponse, showToolCall, showToolResult, showIntention, startToolCallSpinner, stopToolCallSpinner } from '../ui/renderer';
-import { confirmAction, promptLoopResolution } from '../ui/confirm';
+import { showResponse, showToolCall, showToolResult, startToolCallSpinner, stopToolCallSpinner } from '../ui/renderer';
+import { uiEvents } from '../ui/ui-events';
+import { confirmDangerousTool } from '../ui/confirm';
 import * as path from 'path';
 import { TrackLogger } from '../context/conductor/track-logger';
 import { ContextWindow } from '../context/context-window';
 import { ConfigManager } from '../config';
-import ora from 'ora';
 import { getAutoConfirm } from '../utils/env';
 import chalk from 'chalk';
 import { theme } from '../ui/theme';
@@ -53,20 +53,21 @@ export class Agent {
   }[] = [];
 
   constructor(options: AgentOptions = {}) {
+    const cfg = ConfigManager.get();
     this.options = {
-      model: options.model ?? 'zuri',
+      model: options.model ?? cfg.defaultModel ?? 'zuri',
       yes: options.yes ?? false,
       execute: options.execute ?? true,
-      maxTokens: options.maxTokens ?? 8192,
-      contextDepth: options.contextDepth ?? 2,
+      maxTokens: options.maxTokens ?? cfg.maxTokens,
+      contextDepth: options.contextDepth ?? cfg.contextDepth,
     };
     if (getAutoConfirm()) this.options.yes = true;
 
-    const cfg = ConfigManager.get();
     this.contextWindow = new ContextWindow({
-      maxTokens: this.options.maxTokens,
+      maxTokens: cfg.contextWindow,
       warningThreshold: cfg.tokenWarningThreshold,
       compactThreshold: cfg.tokenCompactThreshold,
+      preserveTailMessages: cfg.contextPreserveMessages,
     });
   }
 
@@ -95,7 +96,11 @@ export class Agent {
 
     this.messages.push({ role: 'user', content: prompt });
     this.resetCancellation();
-    await this.runLoop();
+    try {
+      await this.runLoop();
+    } finally {
+      uiEvents.setPhase('idle');
+    }
   }
 
   private async runLoop(): Promise<void> {
@@ -118,31 +123,30 @@ export class Agent {
       // CHECK FENETRE DE CONTEXTE
       const check = this.contextWindow.check(this.messages);
       if (check.action === 'warn') {
-        process.stdout.write(chalk.hex(theme.warning)('\n⚠ Attention : le contexte approche de la limite (' + this.contextWindow.getStats(this.messages).totalTokens + ' tokens).\n'));
+        const pct = Math.round(
+          (this.contextWindow.getStats(this.messages).totalTokens /
+            this.contextWindow.getStats(this.messages).maxTokens) *
+            100
+        );
+        process.stdout.write(
+          chalk.hex(theme.muted)(`\n  · contexte à ${pct}% — compaction prochaine si nécessaire\n`)
+        );
       }
       if (check.action === 'compact') {
-        const beforeCount = this.messages.length;
         const beforeStats = this.contextWindow.getStats(this.messages);
         this.messages = this.contextWindow.compact(this.messages);
-        const afterCount = this.messages.length;
         const afterStats = this.contextWindow.getStats(this.messages);
-        if (afterCount < beforeCount || afterStats.totalTokens < beforeStats.totalTokens) {
+        if (afterStats.totalTokens < beforeStats.totalTokens) {
           const savedTokens = beforeStats.totalTokens - afterStats.totalTokens;
           process.stdout.write(
-            chalk.hex(theme.warning)(
-              `\n⚠ Contexte compressé : mémoire optimisée pour rester sous la limite (${savedTokens > 0 ? `-${savedTokens.toLocaleString()} tokens` : ''}).\n`
+            chalk.hex(theme.muted)(
+              `\n  · contexte compressé${savedTokens > 0 ? ` (−${savedTokens.toLocaleString()} tk)` : ''}\n`
             )
           );
         }
       }
 
-      const spinnerText = iterations === 1
-        ? chalk.hex(theme.muted)('Analyse de la demande...')
-        : chalk.hex(theme.muted)('Synthèse des résultats...');
-      const spinner = ora({
-        text: spinnerText,
-        spinner: { frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'], interval: 80 }
-      }).start();
+      uiEvents.setPhase('thinking');
 
       try {
         // Dynamic Context Refresh: Keep system prompt (git status, active track, project map) 100% fresh in every turn
@@ -156,22 +160,18 @@ export class Agent {
         }
 
         const response = await this.client!.chat(this.messages, this.options);
-        spinner.stop();
 
         this.totalTokensUsed += response.usage.totalTokens;
         this.totalCostFcfa += response.usage.costFcfa;
 
         if (response.finishReason === 'tool_calls' && response.toolCalls.length > 0) {
           this.pushAssistantToolCalls(response);
-          if (response.content && !this.isAck(response.content)) {
-            showResponse(response.content);
-          }
+          // Pas de monologue avant les outils — évite la duplication avec les lignes ✓ Read(...)
           for (const toolCall of response.toolCalls) {
             if (this.cancelled || this.paused) {
               break;
             }
             const isSilent = silentTools.has(toolCall.name);
-            if (!isSilent) showIntention(toolCall.name, toolCall.arguments);
             await this.handleToolCall(toolCall, isSilent);
           }
           if (this.paused) {
@@ -189,9 +189,10 @@ export class Agent {
         // MAJ STATUS BAR A LA FIN
         break;
       } catch (error) {
+        uiEvents.setPhase('idle');
         const imaraErr = fromUnknown(error);
         const userMessage = sanitizeErrorMessage(imaraErr.message);
-        spinner.fail(chalk.hex(theme.error)(userMessage));
+        process.stdout.write(chalk.hex(theme.error)(`\n  ✗ ${userMessage}\n`));
         throw new Error(userMessage);
       }
     }
@@ -326,7 +327,7 @@ export class Agent {
 
     if (this.isDangerousTool(name) && !this.options.yes) {
       stopToolCallSpinner();
-      const choice = await confirmAction(`Voulez-vous exécuter le tool "${name}" ?`);
+      const choice = await confirmDangerousTool(name, args);
       if (choice === 'no') {
         this.pushToolResult(id, name, 'Exécution annulée par l\'utilisateur.');
         showToolResult(name, 'Annulé');

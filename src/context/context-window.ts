@@ -19,16 +19,18 @@ export interface WindowStats {
 
 interface ContextWindowOptions {
   maxTokens: number;
-  warningThreshold: number; // pourcentage (0-100)
-  compactThreshold: number; // pourcentage (0-100)
+  warningThreshold: number; // pourcentage (0-100) ou ratio (0-1)
+  compactThreshold: number; // pourcentage (0-100) ou ratio (0-1)
+  preserveTailMessages?: number;
 }
 
-const MIN_PRESERVE_MESSAGES = 3; // system + 2 derniers echanges
+const DEFAULT_PRESERVE_TAIL = 32;
 
 export class ContextWindow {
   private maxTokens: number;
   private warningTokens: number;
   private compactTokens: number;
+  private preserveTailMessages: number;
 
   constructor(options: ContextWindowOptions) {
     this.maxTokens = options.maxTokens;
@@ -36,6 +38,7 @@ export class ContextWindow {
     const compactFactor = options.compactThreshold > 1 ? options.compactThreshold / 100 : options.compactThreshold;
     this.warningTokens = Math.floor(this.maxTokens * warnFactor);
     this.compactTokens = Math.floor(this.maxTokens * compactFactor);
+    this.preserveTailMessages = Math.max(4, options.preserveTailMessages ?? DEFAULT_PRESERVE_TAIL);
   }
 
   getStats(messages: Message[]): WindowStats {
@@ -70,7 +73,8 @@ export class ContextWindow {
   }
 
   compact(messages: Message[], sessionId?: string): Message[] {
-    if (messages.length <= MIN_PRESERVE_MESSAGES) {
+    const minMessages = 1 + this.preserveTailMessages;
+    if (messages.length <= minMessages) {
       return this.truncateToFit(messages);
     }
 
@@ -79,8 +83,8 @@ export class ContextWindow {
       return this.truncateToFit(messages);
     }
 
-    // Conserver system + 2 derniers echanges (user + assistant/tool)
-    const tail = messages.slice(-2);
+    // Conserver system + N derniers messages (demandes, réponses, résultats d'outils)
+    const tail = messages.slice(-this.preserveTailMessages);
     const middleMessages = messages.filter(
       m => m.role !== 'system' && !tail.includes(m)
     );
