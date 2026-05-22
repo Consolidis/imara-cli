@@ -3,7 +3,7 @@ import { ImaraClient } from '../api/imara-client';
 import { Keychain } from '../auth/keychain';
 import { ToolExecutor } from './tools';
 import { ContextBuilder } from '../context/context-builder';
-import { showResponse, showReasoning, showToolCall, showToolResult, startToolCallSpinner, stopToolCallSpinner } from '../ui/renderer';
+import { showResponse, showReasoning, showToolCall, showToolResult, startToolCallSpinner, stopToolCallSpinner, startThinkingSpinner, stopThinkingSpinner } from '../ui/renderer';
 import { uiEvents } from '../ui/ui-events';
 import { confirmDangerousTool } from '../ui/confirm';
 import * as path from 'path';
@@ -159,7 +159,9 @@ export class Agent {
           }
         }
 
+        startThinkingSpinner();
         const response = await this.client!.chat(this.messages, this.options);
+        stopThinkingSpinner();
 
         this.totalTokensUsed += response.usage.totalTokens;
         this.totalCostFcfa += response.usage.costFcfa;
@@ -193,6 +195,7 @@ export class Agent {
         // MAJ STATUS BAR A LA FIN
         break;
       } catch (error) {
+        stopThinkingSpinner();
         uiEvents.setPhase('idle');
         const imaraErr = fromUnknown(error);
         const userMessage = sanitizeErrorMessage(imaraErr.message);

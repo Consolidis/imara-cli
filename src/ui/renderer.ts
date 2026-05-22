@@ -6,6 +6,7 @@ export { showErrorPanel } from './components/error-panel';
 export { renderStatusBar, clearStatusBar, setStatusBarPinned, type StatusState } from './components/status-bar';
 export { showUserMessage } from './components/user-message';
 export { uiEvents, type AgentPhase } from './ui-events';
+export { startThinkingSpinner, stopThinkingSpinner } from './components/thinking-spinner';
 
 import { showToolCall } from './components/tool-call';
 
