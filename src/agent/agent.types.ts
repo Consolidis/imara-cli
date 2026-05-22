@@ -30,10 +30,12 @@ export interface Message {
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   name?: string;
+  reasoning?: string;
 }
 
 export interface AgentResponse {
   content: string;
+  reasoning?: string;
   finishReason: 'stop' | 'tool_calls';
   toolCalls: ParsedToolCall[];
   usage: {

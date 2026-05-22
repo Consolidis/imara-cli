@@ -1,4 +1,5 @@
 export { showResponse } from './components/response';
+export { showReasoning } from './components/reasoning';
 export { showToolCall, startToolCallSpinner, stopToolCallSpinner } from './components/tool-call';
 export { showIntention } from './components/intention';
 export { showErrorPanel } from './components/error-panel';

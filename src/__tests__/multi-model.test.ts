@@ -134,5 +134,26 @@ describe('Track 007 — Support Multi-Modèles & Swapping Dynamique', () => {
         client.chat([{ role: 'user', content: 'insufficient funds prompt' }], { model: 'gpt-4o' })
       ).rejects.toThrow('Solde insuffisant dans votre wallet. Veuillez recharger vos crédits sur https://imara.consolidis.com pour utiliser ce modèle.');
     });
+
+    it('should parse and return reasoning field from response if present', async () => {
+      const client = new ImaraClient('mock-key');
+      const { fetchWithTimeout } = await import('../utils/fetch-with-timeout');
+      
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          content: 'Final response',
+          reasoning: 'Thinking process details',
+          finishReason: 'stop',
+          toolCalls: [],
+          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20, costFcfa: 5 }
+        })
+      } as any);
+
+      const res = await client.chat([{ role: 'user', content: 'hi' }], { model: 'deepseek-reasoner' });
+
+      expect(res.content).toBe('Final response');
+      expect(res.reasoning).toBe('Thinking process details');
+    });
   });
 });

@@ -3,7 +3,7 @@ import { ImaraClient } from '../api/imara-client';
 import { Keychain } from '../auth/keychain';
 import { ToolExecutor } from './tools';
 import { ContextBuilder } from '../context/context-builder';
-import { showResponse, showToolCall, showToolResult, startToolCallSpinner, stopToolCallSpinner } from '../ui/renderer';
+import { showResponse, showReasoning, showToolCall, showToolResult, startToolCallSpinner, stopToolCallSpinner } from '../ui/renderer';
 import { uiEvents } from '../ui/ui-events';
 import { confirmDangerousTool } from '../ui/confirm';
 import * as path from 'path';
@@ -164,6 +164,10 @@ export class Agent {
         this.totalTokensUsed += response.usage.totalTokens;
         this.totalCostFcfa += response.usage.costFcfa;
 
+        if (response.reasoning) {
+          showReasoning(response.reasoning);
+        }
+
         if (response.finishReason === 'tool_calls' && response.toolCalls.length > 0) {
           this.pushAssistantToolCalls(response);
           // Pas de monologue avant les outils — évite la duplication avec les lignes ✓ Read(...)
@@ -182,7 +186,7 @@ export class Agent {
         }
 
         if (response.content) {
-          this.messages.push({ role: 'assistant', content: response.content });
+          this.messages.push({ role: 'assistant', content: response.content, reasoning: response.reasoning });
           showResponse(response.content);
         }
 
@@ -210,10 +214,11 @@ export class Agent {
     return isShort && ackPhrases.some(p => text.trim().toLowerCase().startsWith(p));
   }
 
-  private pushAssistantToolCalls(response: { content: string; toolCalls: ParsedToolCall[] }): void {
+  private pushAssistantToolCalls(response: { content: string; toolCalls: ParsedToolCall[]; reasoning?: string }): void {
     const assistantMsg: Message = {
       role: 'assistant',
       content: response.content || '',
+      reasoning: response.reasoning,
       tool_calls: response.toolCalls.map(tc => ({
         id: tc.id,
         type: 'function',
