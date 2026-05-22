@@ -34,4 +34,16 @@ describe('RunCommandTool (Targeted & Secure)', () => {
   it('should throw an error and refuse execution if cwd is outside the project workspace', async () => {
     await expect(RunCommandTool.run({ command: 'echo unsafe', cwd: '../../' })).rejects.toThrow('Sécurité');
   });
+
+  it('should auto-confirm an interactive [y/n] prompt and continue', async () => {
+    const command = 'node -e "process.stdout.write(\'[y/n]? \'); process.stdin.on(\'data\', d => { console.log(\'input_received:\' + d.toString().trim()); process.exit(0); });"';
+    const result = await RunCommandTool.run({ command });
+    expect(result).toContain('input_received:y');
+  });
+
+  it('should auto-confirm a press enter prompt and continue', async () => {
+    const command = 'node -e "process.stdout.write(\'Press enter to continue: \'); process.stdin.on(\'data\', d => { console.log(\'enter_received:\' + d.toString().length); process.exit(0); });"';
+    const result = await RunCommandTool.run({ command });
+    expect(result).toContain('enter_received:');
+  });
 });

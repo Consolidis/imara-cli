@@ -43,13 +43,13 @@ export class RunCommandTool {
     }
 
     return new Promise((resolve, reject) => {
-      exec(
+      const child = exec(
         args.command,
         {
           cwd: targetCwd,
           timeout: 60000,
           maxBuffer: 10 * 1024 * 1024,
-          stdio: ['ignore', 'pipe', 'pipe']
+          stdio: ['pipe', 'pipe', 'pipe']
         } as any,
         (error: any, stdout: any, stderr: any) => {
           const result = stdout + stderr;
@@ -60,6 +60,58 @@ export class RunCommandTool {
           }
         }
       );
+
+      if (child.stdin) {
+        child.stdin.on('error', () => {
+          // Ignorer silencieusement les erreurs de pipe/écriture si le flux se ferme
+        });
+      }
+
+      const checkPrompts = (data: string) => {
+        if (!child.stdin || !child.stdin.writable) return;
+
+        const yNPatterns = [
+          /\[y\/n\]/i,
+          /\(y\/n\)/i,
+          /y\/n\s*\?/i,
+          /continue\?/i,
+          /confirm\?/i,
+          /voulez-vous continuer/i
+        ];
+
+        const enterPatterns = [
+          /press enter/i,
+          /appuyez sur entrée/i,
+          /presser entrée/i,
+          /touche entrée/i
+        ];
+
+        if (yNPatterns.some(p => p.test(data))) {
+          try {
+            child.stdin.write('y\n');
+          } catch {
+            // Échec d'écriture ignoré
+          }
+        } else if (enterPatterns.some(p => p.test(data))) {
+          try {
+            child.stdin.write('\n');
+          } catch {
+            // Échec d'écriture ignoré
+          }
+        }
+      };
+
+      if (child.stdout) {
+        child.stdout.on('data', (chunk) => {
+          checkPrompts(chunk.toString());
+        });
+      }
+
+      if (child.stderr) {
+        child.stderr.on('data', (chunk) => {
+          checkPrompts(chunk.toString());
+        });
+      }
     });
   }
 }
