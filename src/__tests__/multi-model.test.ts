@@ -87,6 +87,37 @@ describe('Track 007 — Support Multi-Modèles & Swapping Dynamique', () => {
       );
     });
 
+    it('should attach external key headers for external models', async () => {
+      const { Keychain } = await import('../auth/keychain');
+      const getSpy = vi.spyOn(Keychain, 'getExternalKey').mockResolvedValue('sk-external-123');
+
+      const client = new ImaraClient('mock-key');
+      const { fetchWithTimeout } = await import('../utils/fetch-with-timeout');
+      
+      const mockFetch = vi.mocked(fetchWithTimeout).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          content: 'Hello',
+          finishReason: 'stop',
+          toolCalls: [],
+          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20, costFcfa: 5 }
+        })
+      } as any);
+
+      await client.chat([{ role: 'user', content: 'hi' }], { model: 'deepseek-chat' });
+
+      expect(getSpy).toHaveBeenCalledWith('deepseek-chat');
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/v1/agent/chat'),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'x-external-key': 'sk-external-123',
+            'x-external-base-url': 'https://api.deepseek.com'
+          })
+        })
+      );
+    });
+
     it('should translate insufficient wallet balance errors', async () => {
       const client = new ImaraClient('mock-key');
       const { fetchWithTimeout } = await import('../utils/fetch-with-timeout');

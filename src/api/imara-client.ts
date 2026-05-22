@@ -9,6 +9,8 @@ import { computeContextHash } from '../utils/cache';
 import { join } from 'path';
 import { homedir } from 'os';
 import chalk from 'chalk';
+import { isNativeModel } from '../utils/model';
+import { Keychain } from '../auth/keychain';
 
 function sanitizeForJson(value: string): string {
   return value.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
@@ -79,15 +81,28 @@ export class ImaraClient {
             console.error(`\x1b[36m[IMARA_DEBUG] Payload: ${JSON.stringify(payload, null, 2)}\x1b[0m`);
           }
 
+          const headers: Record<string, string> = {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+            'X-Model': modelId,
+          };
+
+          const isNative = isNativeModel(options.model);
+          if (!isNative) {
+            const externalKey = await Keychain.getExternalKey(options.model || '');
+            if (externalKey) {
+              headers['x-external-key'] = externalKey;
+              headers['x-external-base-url'] = options.model?.toLowerCase().includes('deepseek')
+                ? 'https://api.deepseek.com'
+                : 'https://api.openai.com/v1';
+            }
+          }
+
           const response = await fetchWithTimeout(`${this.baseUrl}/v1/agent/chat`, {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${this.apiKey}`,
-              'Content-Type': 'application/json',
-              'X-Model': modelId,
-            },
+            headers,
             body: JSON.stringify(payload),
-            timeoutMs: 30000,
+            timeoutMs: isNative ? 30000 : 60000,
             retries: 0
           });
 

@@ -103,12 +103,17 @@ export class Calculator {
 
   describe('WorkspaceIndexTool', () => {
     it('should perform recursive scans and find symbols', async () => {
-      const file1 = path.join(TEMP_DIR, 'file1.ts');
-      const content1 = `export class SmartScanner {}`;
-      fs.writeFileSync(file1, content1, 'utf8');
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(TEMP_DIR);
+      try {
+        const file1 = path.join(TEMP_DIR, 'file1.ts');
+        const content1 = `export class SmartScanner {}`;
+        fs.writeFileSync(file1, content1, 'utf8');
 
-      const result = await WorkspaceIndexTool.run({ query: 'SmartScanner' });
-      expect(result).toContain('SmartScanner');
+        const result = await WorkspaceIndexTool.run({ query: 'SmartScanner' });
+        expect(result).toContain('SmartScanner');
+      } finally {
+        cwdSpy.mockRestore();
+      }
     });
   });
 

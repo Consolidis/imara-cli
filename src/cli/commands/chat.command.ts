@@ -13,12 +13,94 @@ import { showErrorPanel } from '../../ui/components/error-panel';
 import { TrackManager } from '../../context/conductor/track-manager';
 import { renderWelcome } from '../../ui/screens/welcome';
 import { ConfigManager } from '../../config/config-manager';
+import { isNativeModel } from '../../utils/model';
+import { Keychain } from '../../auth/keychain';
 
 interface ChatOptions {
   model?: string;
   yes?: boolean;
   resume?: string;
   execute?: boolean;
+}
+
+async function verifyAndPromptExternalKey(model: string): Promise<boolean> {
+  const isNative = isNativeModel(model);
+  if (isNative) return true;
+
+  const key = await Keychain.getExternalKey(model);
+  if (key) return true;
+
+  console.log(chalk.hex(theme.warning)(`\n  🔑 Modèle externe "${model}" détecté. Une clé API valide est requise.`));
+  
+  while (true) {
+    const apiKey = await new Promise<string>(resolve => {
+      const tempRl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+      tempRl.question(
+        chalk.hex(theme.primary)(`  Veuillez saisir votre clé API pour ${model} (ou Entrée pour annuler) : `),
+        (ans) => {
+          tempRl.close();
+          resolve(ans.trim());
+        }
+      );
+    });
+
+    if (!apiKey) {
+      return false;
+    }
+
+    console.log(chalk.hex(theme.muted)(`  Vérification de la clé API auprès du fournisseur...`));
+    
+    let isValid = false;
+    let errorMsg = '';
+    try {
+      const testUrl = model.toLowerCase().includes('deepseek')
+        ? 'https://api.deepseek.com/chat/completions'
+        : 'https://api.openai.com/v1/chat/completions';
+      
+      const testModel = model.toLowerCase().includes('deepseek') ? 'deepseek-chat' : 'gpt-4o-mini';
+      
+      const response = await fetch(testUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: testModel,
+          messages: [{ role: 'user', content: 'ping' }],
+          max_tokens: 1
+        })
+      });
+
+      if (response.ok) {
+        isValid = true;
+      } else {
+        if (response.status === 401) {
+          errorMsg = 'Clé API invalide (erreur de connexion 401).';
+        } else {
+          const bodyTxt = await response.text();
+          errorMsg = `Erreur du fournisseur (${response.status}) : ${bodyTxt.slice(0, 150)}`;
+          if (response.status !== 401) {
+            console.log(chalk.hex(theme.warning)(`  ⚠️  Statut de vérification non optimal (${response.status}), mais la clé semble acceptée (pas d'erreur 401).`));
+            isValid = true;
+          }
+        }
+      }
+    } catch (e) {
+      errorMsg = e instanceof Error ? e.message : String(e);
+    }
+
+    if (isValid) {
+      await Keychain.saveExternalKey(model, apiKey);
+      console.log(chalk.hex(theme.accent)(`  ✓ Clé API validée et enregistrée avec succès.\n`));
+      return true;
+    } else {
+      console.log(chalk.hex(theme.error)(`  ✗ Échec de la validation : ${errorMsg}\n`));
+    }
+  }
 }
 
 export async function chatCommand(options: ChatOptions, initialPrompt?: string) {
@@ -32,7 +114,15 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
   const user = await requireAuth();
   const projectInfo = await ProjectAnalyzer.analyze();
   
-  const resolvedModel = options.model || ConfigManager.get().defaultModel || 'zuri';
+  let resolvedModel = options.model || ConfigManager.get().defaultModel || 'zuri';
+
+  if (!isNativeModel(resolvedModel)) {
+    const ok = await verifyAndPromptExternalKey(resolvedModel);
+    if (!ok) {
+      console.log(chalk.hex(theme.warning)('\n  ⚠ Clé API requise pour le modèle externe. Relancez la commande.\n'));
+      return;
+    }
+  }
 
   return new Promise<void>(async (resolve) => {
     renderWelcome({
@@ -364,6 +454,17 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
           console.log(chalk.hex(theme.primary)(`\n  👉 Tapez ${chalk.bold('/model <nom>')} pour activer un modèle (ex: ${chalk.bold('/model flash')})\n`));
           rl.prompt();
           return;
+        }
+
+        // Validate and prompt if external model
+        if (!isNativeModel(model)) {
+          rl.pause();
+          const ok = await verifyAndPromptExternalKey(model);
+          rl.resume();
+          if (!ok) {
+            rl.prompt();
+            return;
+          }
         }
 
         agent.setModel(model);

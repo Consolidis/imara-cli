@@ -165,12 +165,15 @@ describe('Onboarding Wizard & Integration', () => {
 
     // Feed unrecognized command
     await lineCallback('/unknown-command');
+    await lineCallback('');
 
     // Feed recognized command /clear (should not call agent)
     await lineCallback('/clear');
+    await lineCallback('');
 
     // Feed regular message (should call agent)
     await lineCallback('hello there');
+    await lineCallback('');
 
     // Agent.run should only be called once (for "hello there"), and not for slash commands!
     expect(runSpy).toHaveBeenCalledTimes(1);
