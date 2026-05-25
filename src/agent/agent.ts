@@ -51,6 +51,7 @@ export class Agent {
     targetFile?: string;
     timestamp: number;
   }[] = [];
+  private preloadedSystemPrompt: string | null = null;
 
   constructor(options: AgentOptions = {}) {
     const cfg = ConfigManager.get();
@@ -71,8 +72,18 @@ export class Agent {
     });
   }
 
+  /** Lance le préchargement du contexte en arrière-plan (fire & forget) */
+  initContext(): void {
+    ContextBuilder.buildSystemPrompt(this.options).then(prompt => {
+      this.preloadedSystemPrompt = prompt;
+    }).catch(() => {
+      // Échec silencieux — run() construira le prompt normalement
+    });
+  }
+
   cancel(): void {
     this.cancelled = true;
+    this.client?.abort();
   }
 
   resetCancellation(): void {
@@ -90,7 +101,7 @@ export class Agent {
     }
 
     if (this.messages.length === 0) {
-      const systemPrompt = await ContextBuilder.buildSystemPrompt(this.options);
+      const systemPrompt = this.preloadedSystemPrompt || await ContextBuilder.buildSystemPrompt(this.options);
       this.messages.push({ role: 'system', content: systemPrompt });
     }
 
@@ -98,6 +109,18 @@ export class Agent {
     this.resetCancellation();
     try {
       await this.runLoop();
+    } catch (error) {
+      // Interruption volontaire (ECHAP) = pas une erreur, juste un retour silencieux
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+      // AbortError de l'appel API (cas où client.abort() a été appelé)
+      if (error instanceof Error &&
+          (error.name === 'AbortError' || error.message.includes('fetch aborted') || error.message.includes('The operation was aborted'))) {
+        return;
+      }
+      // Toute autre erreur = vraie erreur
+      throw error;
     } finally {
       uiEvents.setPhase('idle');
     }
@@ -173,12 +196,26 @@ export class Agent {
         if (response.finishReason === 'tool_calls' && response.toolCalls.length > 0) {
           this.pushAssistantToolCalls(response);
           // Pas de monologue avant les outils — évite la duplication avec les lignes ✓ Read(...)
+          const readOnlyBatch: ParsedToolCall[] = [];
           for (const toolCall of response.toolCalls) {
             if (this.cancelled || this.paused) {
               break;
             }
-            const isSilent = silentTools.has(toolCall.name);
-            await this.handleToolCall(toolCall, isSilent);
+            if (this.isReadOnlyTool(toolCall.name)) {
+              readOnlyBatch.push(toolCall);
+            } else {
+              // Flush le batch read-only avant d'exécuter un outil avec side-effect
+              if (readOnlyBatch.length > 0) {
+                await this.executeReadOnlyBatch(readOnlyBatch, silentTools);
+                readOnlyBatch.length = 0;
+              }
+              const isSilent = silentTools.has(toolCall.name);
+              await this.handleToolCall(toolCall, isSilent);
+            }
+          }
+          // Flush le dernier batch read-only
+          if (readOnlyBatch.length > 0) {
+            await this.executeReadOnlyBatch(readOnlyBatch, silentTools);
           }
           if (this.paused) {
             break;
@@ -376,6 +413,46 @@ export class Agent {
 
   private isDangerousTool(name: string): boolean {
     return name === 'run_command' || name === 'write_file' || name === 'delete_file';
+  }
+
+  /** Outils sans side-effect pouvant être parallélisés */
+  private isReadOnlyTool(name: string): boolean {
+    return [
+      'read_file', 'read_file_range', 'inspect_file', 'code_map',
+      'list_directory', 'git_diff', 'search_files', 'read_multiple_files',
+      'smart_read', 'workspace_index', 'diff_preview',
+      'project_summary', 'web_search'
+    ].includes(name);
+  }
+
+  /** Exécute un lot d'outils read-only en parallèle et pousse les résultats dans l'ordre */
+  private async executeReadOnlyBatch(toolCalls: ParsedToolCall[], silentTools: Set<string>): Promise<void> {
+    const results: Array<{ id: string; name: string; content: string } | Error> = await Promise.all(
+      toolCalls.map(async (tc) => {
+        try {
+          const result = await ToolExecutor.execute(tc.name, tc.arguments);
+          if (!result.ok) throw result.error;
+          return { id: tc.id, name: tc.name, content: result.value };
+        } catch (e) {
+          return e instanceof Error ? e : new Error(String(e));
+        }
+      })
+    );
+
+    // Pousser les résultats dans l'ordre original
+    for (let i = 0; i < toolCalls.length; i++) {
+      const tc = toolCalls[i];
+      const res = results[i];
+      if (res instanceof Error) {
+        showToolResult(tc.name, 'Erreur');
+        this.pushToolResult(tc.id, tc.name, `Erreur: ${res.message}`);
+      } else {
+        if (!silentTools.has(tc.name)) {
+          showToolResult(tc.name, res.content);
+        }
+        this.pushToolResult(tc.id, tc.name, res.content);
+      }
+    }
   }
 
   getSessionStats(): { tokens: number; cost: number; messages: number } {

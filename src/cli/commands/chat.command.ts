@@ -142,7 +142,8 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
       ...options,
       model: resolvedModel
     });
-
+    // Préchargement du contexte en arrière-plan (gain ~500ms sur la première réponse)
+    agent.initContext();
     let isProcessing = false;
 
     // ESCAPE Keypress listener to cancel agent processing

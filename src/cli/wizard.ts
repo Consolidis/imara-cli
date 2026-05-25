@@ -58,8 +58,9 @@ export async function runSetupWizard(): Promise<void> {
       console.log(chalk.gray(`   Utilisateur : ${userInfo.name} (${userInfo.email})`));
       console.log(chalk.gray(`   Solde       : ${userInfo.walletBalance} FCFA`));
       
-      // Save valid key to system keychain
+      // Save valid key to system keychain + config fallback
       await Keychain.save(apiKey);
+      ConfigManager.set({ apiKey });
       userName = userInfo.name;
       userEmail = userInfo.email;
       validated = true;

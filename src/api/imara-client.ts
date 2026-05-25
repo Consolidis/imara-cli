@@ -28,15 +28,24 @@ export class ImaraClient {
   private baseUrl: string;
   private circuitBreaker: CircuitBreaker;
   private cache: CacheManager<AgentResponse>;
+  private abortController: AbortController;
 
   constructor(apiKey: string, baseUrl: string = getApiUrl()) {
-    this.apiKey = getApiKey() || apiKey;
+    this.apiKey = apiKey || getApiKey() || '';
     this.baseUrl = baseUrl;
     this.circuitBreaker = new CircuitBreaker('imara-api');
     this.cache = new CacheManager<AgentResponse>(
       join(homedir(), '.imara', 'cache'),
       { ttlMs: 24 * 60 * 60 * 1000, maxSize: 100 }
     );
+    this.abortController = new AbortController();
+  }
+
+  /** Annule toutes les requêtes HTTP en cours */
+  abort(): void {
+    this.abortController.abort();
+    // Créer un nouveau controller pour les prochains appels
+    this.abortController = new AbortController();
   }
 
   async validateApiKey(): Promise<UserInfo> {
@@ -45,7 +54,8 @@ export class ImaraClient {
         const response = await fetchWithTimeout(`${this.baseUrl}/v1/agent/profile`, {
           headers: { 'Authorization': `Bearer ${this.apiKey}` },
           timeoutMs: 5000,
-          retries: 0
+          retries: 0,
+          externalSignal: this.abortController.signal
         });
 
         if (!response.ok) {
@@ -103,7 +113,8 @@ export class ImaraClient {
             headers,
             body: JSON.stringify(payload),
             timeoutMs: isNative ? 30000 : 60000,
-            retries: 0
+            retries: 0,
+            externalSignal: this.abortController.signal
           });
 
           if (!response.ok) {
