@@ -5,6 +5,7 @@ export interface RetryConfig {
   retryableStatusCodes?: number[];
   onRetry?: (error: unknown, attempt: number, delayMs: number) => void;
   maxTimeMs?: number; // Maximum elapsed time in milliseconds
+  constant?: boolean; // Use constant delay instead of backoff/jitter
 }
 
 export const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
@@ -14,6 +15,7 @@ export const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
   retryableStatusCodes: [408, 429, 500, 502, 503, 504],
   onRetry: () => {},
   maxTimeMs: process.env.NODE_ENV === 'test' ? 0 : 90000, // 1min 30s limit
+  constant: false,
 };
 
 /**
@@ -115,9 +117,10 @@ export async function executeWithRetry<T>(
         throw error;
       }
 
-      // Full Jitter: random(0, min(maxDelayMs, baseDelayMs * 2^attempt))
-      const temp = Math.min(finalConfig.maxDelayMs, finalConfig.baseDelayMs * Math.pow(2, attempt));
-      let delayMs = Math.random() * temp;
+      // Jitter or constant delay
+      let delayMs = finalConfig.constant
+        ? finalConfig.baseDelayMs
+        : Math.random() * Math.min(finalConfig.maxDelayMs, finalConfig.baseDelayMs * Math.pow(2, attempt));
 
       if (finalConfig.maxTimeMs > 0) {
         const remainingMs = finalConfig.maxTimeMs - elapsedMs;

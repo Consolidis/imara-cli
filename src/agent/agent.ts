@@ -34,6 +34,13 @@ function sanitizeErrorMessage(msg: string): string {
   return msg;
 }
 
+export class AgentCancelledError extends Error {
+  constructor() {
+    super("Exécution interrompue par l'utilisateur.");
+    this.name = 'AgentCancelledError';
+  }
+}
+
 export class Agent {
   private messages: Message[] = [];
   private options: Required<AgentOptions>;
@@ -110,16 +117,16 @@ export class Agent {
     try {
       await this.runLoop();
     } catch (error) {
-      // Interruption volontaire (ECHAP) = pas une erreur, juste un retour silencieux
-      if (error instanceof DOMException && error.name === 'AbortError') {
+      if (this.cancelled ||
+          error instanceof AgentCancelledError ||
+          (error instanceof DOMException && error.name === 'AbortError') ||
+          (error instanceof Error &&
+           (error.name === 'AbortError' ||
+            error.message.includes('fetch aborted') ||
+            error.message.includes('The operation was aborted')))) {
+        process.stdout.write(chalk.hex(theme.warning)("\n  ✗ Exécution interrompue par l'utilisateur.\n"));
         return;
       }
-      // AbortError de l'appel API (cas où client.abort() a été appelé)
-      if (error instanceof Error &&
-          (error.name === 'AbortError' || error.message.includes('fetch aborted') || error.message.includes('The operation was aborted'))) {
-        return;
-      }
-      // Toute autre erreur = vraie erreur
       throw error;
     } finally {
       uiEvents.setPhase('idle');
@@ -132,7 +139,7 @@ export class Agent {
 
     while (true) {
       if (this.cancelled) {
-        throw new Error('Interruption : exécution annulée par l\'utilisateur.');
+        throw new AgentCancelledError();
       }
       if (this.paused) {
         return;
@@ -234,6 +241,16 @@ export class Agent {
       } catch (error) {
         stopThinkingSpinner();
         uiEvents.setPhase('idle');
+
+        if (this.cancelled ||
+            (error instanceof DOMException && error.name === 'AbortError') ||
+            (error instanceof Error &&
+             (error.name === 'AbortError' ||
+              error.message.includes('fetch aborted') ||
+              error.message.includes('The operation was aborted')))) {
+          throw error;
+        }
+
         const imaraErr = fromUnknown(error);
         const userMessage = sanitizeErrorMessage(imaraErr.message);
         process.stdout.write(chalk.hex(theme.error)(`\n  ✗ ${userMessage}\n`));

@@ -33,7 +33,10 @@ export class ImaraClient {
   constructor(apiKey: string, baseUrl: string = getApiUrl()) {
     this.apiKey = apiKey || getApiKey() || '';
     this.baseUrl = baseUrl;
-    this.circuitBreaker = new CircuitBreaker('imara-api');
+    this.circuitBreaker = new CircuitBreaker('imara-api', {
+      failureThreshold: 10,
+      timeoutMs: 70000
+    });
     this.cache = new CacheManager<AgentResponse>(
       join(homedir(), '.imara', 'cache'),
       { ttlMs: 24 * 60 * 60 * 1000, maxSize: 100 }
@@ -66,6 +69,18 @@ export class ImaraClient {
         }
 
         return await response.json() as UserInfo;
+      }, {
+        constant: true,
+        maxRetries: process.env.NODE_ENV === 'test' ? 0 : 30,
+        baseDelayMs: process.env.NODE_ENV === 'test' ? 0 : 5000,
+        maxTimeMs: process.env.NODE_ENV === 'test' ? 0 : 70000,
+        onRetry: (error, attempt, delayMs) => {
+          if (process.env.NODE_ENV === 'test') return;
+          const sec = Math.ceil(delayMs / 1000);
+          process.stdout.write(
+            chalk.hex('#ffcc00')(`\n  ⚠ [IMARA / Pause Réseau] Connexion indisponible lors de la validation. Nouvelle tentative dans ${sec}s (tentative ${attempt + 1})...\n`)
+          );
+        }
       });
     });
   }
@@ -198,15 +213,15 @@ export class ImaraClient {
 
           return data;
         }, {
+          constant: true,
           maxRetries: process.env.NODE_ENV === 'test' ? 0 : 30,
-          baseDelayMs: process.env.NODE_ENV === 'test' ? 0 : 2000,
-          maxDelayMs: process.env.NODE_ENV === 'test' ? 0 : 15000,
-          maxTimeMs: process.env.NODE_ENV === 'test' ? 0 : 90000,
+          baseDelayMs: process.env.NODE_ENV === 'test' ? 0 : 5000,
+          maxTimeMs: process.env.NODE_ENV === 'test' ? 0 : 70000,
           onRetry: (error, attempt, delayMs) => {
             if (process.env.NODE_ENV === 'test') return;
             const sec = Math.ceil(delayMs / 1000);
             process.stdout.write(
-              chalk.hex('#ffcc00')(`\n  ⚠ [IMARA / API Pause] Connexion temporairement saturée. Pause de ${sec}s avant tentative ${attempt + 1}...\n`)
+              chalk.hex('#ffcc00')(`\n  ⚠ [IMARA / Pause Réseau] Connexion indisponible. Nouvelle tentative dans ${sec}s (tentative ${attempt + 1})...\n`)
             );
           }
         });

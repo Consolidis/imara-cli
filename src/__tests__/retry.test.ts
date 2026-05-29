@@ -43,6 +43,28 @@ describe('Retry Utility', () => {
     expect(fn).toHaveBeenCalledTimes(1); // Fails instantly
   });
 
+  it('should use constant delay when constant option is true', async () => {
+    const fn = vi.fn()
+      .mockRejectedValueOnce(new Error('503 Service Unavailable'))
+      .mockRejectedValueOnce(new Error('503 Service Unavailable'))
+      .mockResolvedValueOnce('recovered');
+
+    const onRetrySpy = vi.fn();
+    const result = await executeWithRetry(fn, {
+      constant: true,
+      baseDelayMs: 50,
+      maxRetries: 3,
+      onRetry: onRetrySpy,
+    });
+
+    expect(result).toBe('recovered');
+    expect(fn).toHaveBeenCalledTimes(3);
+    expect(onRetrySpy).toHaveBeenCalledTimes(2);
+    // The delay passed should be exactly 50ms (constant)
+    expect(onRetrySpy.mock.calls[0][2]).toBe(50);
+    expect(onRetrySpy.mock.calls[1][2]).toBe(50);
+  });
+
   describe('isRetriableError classification', () => {
     it('should classify typical retriable HTTP status codes', () => {
       expect(isRetriableError(new Error('HttpError: 503'))).toBe(true);

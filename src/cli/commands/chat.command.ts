@@ -644,6 +644,7 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
       setStatusBarPinned(false);
       try {
         rl.pause();
+        process.stdin.resume();
         await agent.run(input);
 
         // Auto-save history after each successful interaction
@@ -679,6 +680,7 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
       isProcessing = true;
       try {
         rl.pause();
+        process.stdin.resume();
         // Small delay to let the UI settle
         await new Promise(resolve => setTimeout(resolve, 500));
         showUserMessage(initialPrompt);
