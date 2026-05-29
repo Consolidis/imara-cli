@@ -40,10 +40,14 @@ export async function confirmAction(message: string): Promise<'yes' | 'no' | 'al
   const prompt = new Select({
     name: 'action',
     message: chalk.hex(theme.warning ?? '#ffcc00')(`⚠ ${message}`),
+    prefix: '',
+    pointer(choice: any, index: number) {
+      return this.index === index ? '>' : ' ';
+    },
     choices: [
-      { name: 'no', message: chalk.hex(theme.error ?? '#ff5555')('Non, refuser l\'exécution') },
-      { name: 'yes', message: chalk.hex(theme.accent ?? '#55ff55')('Oui, accepter cette fois') },
-      { name: 'always', message: chalk.hex(theme.primary ?? '#55ccff')('Toujours accepter pour cette session (Auto-Confirm)') }
+      { name: 'no', message: chalk.hex(theme.error ?? '#ff5555')('1. Non, refuser l\'exécution') },
+      { name: 'yes', message: chalk.hex(theme.accent ?? '#55ff55')('2. Oui, accepter cette fois') },
+      { name: 'always', message: chalk.hex(theme.primary ?? '#55ccff')('3. Toujours accepter pour cette session (Auto-Confirm)') }
     ]
   });
 
@@ -68,9 +72,13 @@ export async function promptLoopResolution(message: string): Promise<'continue' 
   const prompt = new Select({
     name: 'loopAction',
     message: chalk.hex(theme.warning ?? '#ffcc00')(`⚠ ${message}`),
+    prefix: '',
+    pointer(choice: any, index: number) {
+      return this.index === index ? '>' : ' ';
+    },
     choices: [
-      { name: 'continue', message: chalk.hex(theme.accent ?? '#55ff55')('Continuer (forcer le passage)') },
-      { name: 'pause', message: chalk.hex(theme.error ?? '#ff5555')('Mettre en pause et revenir au chat') }
+      { name: 'continue', message: chalk.hex(theme.accent ?? '#55ff55')('1. Continuer (forcer le passage)') },
+      { name: 'pause', message: chalk.hex(theme.error ?? '#ff5555')('2. Mettre en pause et revenir au chat') }
     ]
   });
 

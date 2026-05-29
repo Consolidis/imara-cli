@@ -146,12 +146,32 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
     agent.initContext();
     let isProcessing = false;
 
-    // ESCAPE Keypress listener to cancel agent processing
+    // ESCAPE Keypress listener to cancel agent processing & Slash commands helper
     const keypressHandler = (str: string, key: any) => {
-      if (isProcessing && key) {
-        if (key.name === 'escape' || key.name === 'esc') {
+      if (isProcessing) {
+        if (key && (key.name === 'escape' || key.name === 'esc')) {
           console.log(chalk.hex(theme.warning)('\n\n  [Interruption demandée via ÉCHAP...]'));
           agent.cancel();
+        }
+      } else {
+        if (str === '/' && rl.line === '') {
+          // Clear current line
+          process.stdout.write('\r\x1b[K');
+          console.log(chalk.hex(theme.primary).bold('\n  COMMANDES DISPONIBLES :'));
+          console.log(`    ${chalk.hex(theme.secondary)('/track')}      : Voir l'état du track Conductor actif`);
+          console.log(`    ${chalk.hex(theme.secondary)('/approve')}    : Valider le plan (débloquer le codage)`);
+          console.log(`    ${chalk.hex(theme.secondary)('/archive')}    : Terminer et archiver le track`);
+          console.log(`    ${chalk.hex(theme.secondary)('/files')}      : Lister les fichiers consultés`);
+          console.log(`    ${chalk.hex(theme.secondary)('/tokens')}     : Afficher l'utilisation et le coût`);
+          console.log(`    ${chalk.hex(theme.secondary)('/model <id>')} : Changer de modèle (flash, standard, zuri)`);
+          console.log(`    ${chalk.hex(theme.secondary)('/save [name]')} : Sauvegarder la session`);
+          console.log(`    ${chalk.hex(theme.secondary)('/checkpoint')}   : Créer un checkpoint de session`);
+          console.log(`    ${chalk.hex(theme.secondary)('/clear')}      : Effacer l'historique`);
+          console.log(`    ${chalk.hex(theme.secondary)('/welcome')}    : Rejouer le tutoriel interactif`);
+          console.log(`    ${chalk.hex(theme.secondary)('/setup')}      : Relancer la configuration initiale`);
+          console.log(`    ${chalk.hex(theme.secondary)('/exit')}       : Quitter le chat\n`);
+          rl.prompt();
+          rl.write('/');
         }
       }
     };
@@ -282,6 +302,8 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
     rl.prompt = (preserveCursor?: boolean) => {
       setStatusBarPinned(true);
       printStatus(true);
+      const width = process.stdout.columns || 80;
+      process.stdout.write(chalk.hex(theme.muted)('─'.repeat(width)) + '\n');
       originalPrompt(preserveCursor);
     };
 
@@ -317,6 +339,8 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
       if (process.env.NODE_ENV !== 'test') {
         eraseTerminalLines(echoedLineCount);
         showUserMessage(rawInput);
+        const width = process.stdout.columns || 80;
+        process.stdout.write(chalk.hex(theme.muted)('─'.repeat(width)) + '\n');
       }
 
       if (input === '/exit' || input === '/quit') {

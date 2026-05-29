@@ -19,7 +19,7 @@ export function startThinkingSpinner(): void {
     const spinnerFrame = SPINNER_FRAMES[frameIndex % SPINNER_FRAMES.length];
     const dots = DOTS_FRAMES[Math.floor(frameIndex / 2) % DOTS_FRAMES.length];
     clearLine();
-    process.stdout.write(`  ${chalk.hex(theme.warning)(spinnerFrame)} ${chalk.hex(theme.muted)('En cours')}${chalk.hex(theme.muted)(dots)}`);
+    process.stdout.write(`  ${chalk.hex(theme.warning)(spinnerFrame)} ${chalk.hex(theme.muted)('pense')}${chalk.hex(theme.muted)(dots)}`);
     frameIndex++;
   };
 

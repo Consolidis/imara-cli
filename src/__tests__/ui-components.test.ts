@@ -21,8 +21,12 @@ describe('UI Components', () => {
     expect(lines).toContain('hello');
   });
 
-  it('showResponse should not throw', () => {
-    expect(() => showResponse('test')).not.toThrow();
+  it('showResponse should handle prose, code blocks and tables without throwing', () => {
+    expect(() => showResponse('Simple prose text')).not.toThrow();
+    expect(() => showResponse('Prose\n```ts\nconst x = 1;\n```\nMore prose')).not.toThrow();
+    expect(() => showResponse('Table:\n\n| Col 1 | Col 2 |\n|---|---|\n| Cell A | Cell B |\n\nDone.')).not.toThrow();
+    expect(() => showResponse('Table with empty cells:\n\n| H1 | H2 |\n|---|---|\n| | |\n')).not.toThrow();
+    expect(() => showResponse('Invalid table:\n\n| Col 1 | Col 2 |\n| not separator |\n| A | B |\n')).not.toThrow();
   });
 
   it('showToolCall should not throw', () => {
