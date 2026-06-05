@@ -70,7 +70,6 @@ export class Agent {
       contextDepth: options.contextDepth ?? cfg.contextDepth,
     };
     if (getAutoConfirm()) this.options.yes = true;
-
     this.contextWindow = new ContextWindow({
       maxTokens: cfg.contextWindow,
       warningThreshold: cfg.tokenWarningThreshold,
@@ -106,12 +105,10 @@ export class Agent {
       }
       this.client = new ImaraClient(apiKey || '');
     }
-
     if (this.messages.length === 0) {
       const systemPrompt = this.preloadedSystemPrompt || await ContextBuilder.buildSystemPrompt(this.options);
       this.messages.push({ role: 'system', content: systemPrompt });
     }
-
     this.messages.push({ role: 'user', content: prompt });
     this.resetCancellation();
     try {
@@ -136,7 +133,6 @@ export class Agent {
   private async runLoop(): Promise<void> {
     const silentTools = new Set(['list_directory']);
     let iterations = 0;
-
     while (true) {
       if (this.cancelled) {
         throw new AgentCancelledError();
@@ -145,7 +141,6 @@ export class Agent {
         return;
       }
       iterations++;
-
       if (iterations > 120) {
         throw new Error("Nombre maximum d'itérations (120) dépassé. Arrêt de sécurité.");
       }
@@ -177,7 +172,6 @@ export class Agent {
       }
 
       uiEvents.setPhase('thinking');
-
       try {
         // Dynamic Context Refresh: Keep system prompt (git status, active track, project map) 100% fresh in every turn
         if (this.messages.length > 0 && this.messages[0].role === 'system') {
@@ -188,18 +182,14 @@ export class Agent {
             // Fallback silently if system prompt build fails
           }
         }
-
         startThinkingSpinner();
         const response = await this.client!.chat(this.messages, this.options);
         stopThinkingSpinner();
-
         this.totalTokensUsed += response.usage.totalTokens;
         this.totalCostFcfa += response.usage.costFcfa;
-
         if (response.reasoning) {
           showReasoning(response.reasoning);
         }
-
         if (response.finishReason === 'tool_calls' && response.toolCalls.length > 0) {
           this.pushAssistantToolCalls(response);
           // Pas de monologue avant les outils — évite la duplication avec les lignes ✓ Read(...)
@@ -230,18 +220,15 @@ export class Agent {
           // MAJ STATUS BAR APRES TOOLS
           continue;
         }
-
         if (response.content) {
           this.messages.push({ role: 'assistant', content: response.content, reasoning: response.reasoning });
           showResponse(response.content);
         }
-
         // MAJ STATUS BAR A LA FIN
         break;
       } catch (error) {
         stopThinkingSpinner();
         uiEvents.setPhase('idle');
-
         if (this.cancelled ||
             (error instanceof DOMException && error.name === 'AbortError') ||
             (error instanceof Error &&
@@ -250,7 +237,6 @@ export class Agent {
               error.message.includes('The operation was aborted')))) {
           throw error;
         }
-
         const imaraErr = fromUnknown(error);
         // L'affichage de l'erreur est gere par le caller (chat.command.ts via showErrorPanel)
         throw imaraErr;
@@ -351,20 +337,23 @@ export class Agent {
     
     const tempHistory = [...this.richToolCallHistory, newRecord];
     if (tempHistory.length > 10) tempHistory.shift();
-
     // 1. Check for repeating call cycles
     const signatures = tempHistory.map(tc => `${tc.name}:${tc.argsStr}`);
     if (this.detectCallCycle(signatures)) {
       return { isLoop: true, reason: `Répétition cyclique de l'action "${name}"` };
     }
-
     // 2. Check for repeating file modifications
     if (this.detectRepeatingFileModifications(tempHistory)) {
       const filename = newRecord.targetFile ? path.basename(newRecord.targetFile) : 'inconnu';
       return { isLoop: true, reason: `Modifications répétées du fichier "${filename}"` };
     }
-
     return { isLoop: false, reason: '' };
+  }
+
+  private getResultPreview(content: string): string {
+    const trimmed = content.trim();
+    if (!trimmed) return '';
+    return trimmed.split('\n')[0].substring(0, 80).trim();
   }
 
   private async handleToolCall(toolCall: ParsedToolCall, isSilent: boolean): Promise<void> {
@@ -373,7 +362,6 @@ export class Agent {
     }
     const { id, name, arguments: args } = toolCall;
     const argsStr = JSON.stringify(args);
-
     // Record the current tool call in rich history silently
     this.richToolCallHistory.push({
       name,
@@ -383,9 +371,7 @@ export class Agent {
       timestamp: Date.now()
     });
     if (this.richToolCallHistory.length > 10) this.richToolCallHistory.shift();
-
     if (!isSilent) startToolCallSpinner(name, args);
-
     if (this.isDangerousTool(name) && !this.options.yes) {
       stopToolCallSpinner();
       const choice = await confirmDangerousTool(name, args);
@@ -399,17 +385,21 @@ export class Agent {
       }
       startToolCallSpinner(name, args);
     }
-
     const start = Date.now();
     const result = await ToolExecutor.execute(name, args, this);
     const duration = Date.now() - start;
-
     stopToolCallSpinner();
-
     if (result.ok) {
       this.pushToolResult(id, name, result.value);
       TrackLogger.log(name, args, result.value, duration);
-      if (!isSilent) showToolCall(name, args, duration);
+      if (!isSilent) {
+        const preview = this.getResultPreview(result.value);
+        if (preview) {
+          showToolResult(name, preview, duration);
+        } else {
+          showToolCall(name, args, duration);
+        }
+      }
     } else {
       const errMsg = result.error.message;
       this.pushToolResult(id, name, `Erreur: ${errMsg}`);
@@ -454,7 +444,6 @@ export class Agent {
         }
       })
     );
-
     // Pousser les résultats dans l'ordre original
     for (let i = 0; i < toolCalls.length; i++) {
       const tc = toolCalls[i];

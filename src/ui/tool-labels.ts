@@ -15,35 +15,38 @@ export function formatToolAction(name: string, args: Record<string, unknown>): s
 
   switch (name) {
     case 'read_file':
-      return p ? `Read(${shortPath(p)})` : 'Read';
+      return p ? `Read(${shortPath(p)})` : 'Read("(aucun chemin)")';
     case 'read_file_range':
-      return p ? `Read(${shortPath(p)}:${args.start_line ?? 1}-${args.end_line ?? '?'})` : 'Read range';
+      return p ? `Read(${shortPath(p)}:${args.start_line ?? 1}-${args.end_line ?? '?'})` : 'Read range("(aucun chemin)")';
     case 'read_multiple_files':
       return `Read(${paths.length} files)`;
     case 'write_file':
-      return p ? `Write(${shortPath(p)})` : 'Write';
+      return p ? `Write(${shortPath(p)})` : 'Write("(aucun chemin)")';
     case 'append_file':
-      return p ? `Update(${shortPath(p)})` : 'Update';
+      return p ? `Update(${shortPath(p)})` : 'Update("(aucun chemin)")';
     case 'replace_in_file':
-      return p ? `Edit(${shortPath(p)})` : 'Edit';
+      return p ? `Edit(${shortPath(p)})` : 'Edit("(aucun chemin)")';
     case 'batch_replace':
       return 'Edit (batch)';
     case 'list_directory':
-      return p ? `List(${shortPath(p) || '.'})` : 'List(.)';
+      return p ? `List(${shortPath(p) || '.'})` : 'List("(aucun chemin)")';
     case 'search_files':
-      return `Search("${truncate(pattern, 36)}")`;
+      const searchQuery = pattern || '(pattern vide)';
+      return `Search("${truncate(searchQuery, 36)}")`;
     case 'run_command':
-      return `Bash(${truncate(cmd, 48)})`;
+      const runCmd = cmd || '(commande vide)';
+      return `Bash(${truncate(runCmd, 48)})`;
     case 'web_search':
-      return `Web("${truncate(query, 40)}")`;
+      const webQuery = query || '(requete vide)';
+      return `Web("${truncate(webQuery, 40)}")`;
     case 'git_diff':
-      return p ? `Diff(${shortPath(p)})` : 'Diff';
+      return p ? `Diff(${shortPath(p)})` : 'Diff("(aucun chemin)")';
     case 'code_map':
-      return p ? `Map(${shortPath(p)})` : 'Map';
+      return p ? `Map(${shortPath(p)})` : 'Map("(aucun chemin)")';
     case 'inspect_file':
-      return p ? `Inspect(${shortPath(p)})` : 'Inspect';
+      return p ? `Inspect(${shortPath(p)})` : 'Inspect("(aucun chemin)")';
     case 'smart_read':
-      return p ? `Read(${shortPath(p)})` : 'Read';
+      return p ? `Read(${shortPath(p)})` : 'Read("(aucun chemin)")';
     case 'clear_context':
       return 'Clear context';
     case 'conductor_create_track':

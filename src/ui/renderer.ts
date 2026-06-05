@@ -7,14 +7,15 @@ export { renderStatusBar, clearStatusBar, setStatusBarPinned, type StatusState }
 export { showUserMessage } from './components/user-message';
 export { uiEvents, type AgentPhase } from './ui-events';
 export { startThinkingSpinner, stopThinkingSpinner } from './components/thinking-spinner';
-
-import { showToolCall } from './components/tool-call';
-
+import { showToolCall, showToolResultWithContent } from './components/tool-call';
 // Legacy backward-compat re-exports
-export function showToolResult(name: string, _result: unknown, durationMs?: number): void {
-  showToolCall(name, {}, durationMs);
+export function showToolResult(name: string, result: unknown, durationMs?: number): void {
+  if (result && typeof result === 'string' && result.trim()) {
+    showToolResultWithContent(name, result, durationMs);
+  } else {
+    showToolCall(name, {}, durationMs);
+  }
 }
-
 export function showError(message: string) {
   const chalk = require('chalk');
   const { theme } = require('./theme');
