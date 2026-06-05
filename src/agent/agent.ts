@@ -252,9 +252,8 @@ export class Agent {
         }
 
         const imaraErr = fromUnknown(error);
-        const userMessage = sanitizeErrorMessage(imaraErr.message);
-        process.stdout.write(chalk.hex(theme.error)(`\n  ✗ ${userMessage}\n`));
-        throw new Error(userMessage);
+        // L'affichage de l'erreur est gere par le caller (chat.command.ts via showErrorPanel)
+        throw imaraErr;
       }
     }
   }

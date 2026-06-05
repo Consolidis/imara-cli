@@ -146,35 +146,34 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
     agent.initContext();
     let isProcessing = false;
 
-    // ESCAPE Keypress listener to cancel agent processing & Slash commands helper
+    // ESCAPE Keypress listener to cancel agent processing at ANY moment
     const keypressHandler = (str: string, key: any) => {
-      if (isProcessing) {
-        if (key && (key.name === 'escape' || key.name === 'esc')) {
-          console.log(chalk.hex(theme.warning)('\n\n  [Interruption demandée via ÉCHAP...]'));
+      if (key && (key.name === 'escape' || key.name === 'esc')) {
+        if (isProcessing) {
+          const width = process.stdout.columns || 80;
+          console.log(chalk.hex(theme.muted)('─'.repeat(width)));
+          console.log(chalk.hex(theme.warning)('\n  Stop. Arret en cours...\n'));
           agent.cancel();
         }
-      } else {
-        if (str === '/' && rl.line === '') {
-          // Clear current line
-          process.stdout.write('\r\x1b[K');
-          console.log(chalk.hex(theme.primary).bold('\n  COMMANDES DISPONIBLES :'));
-          console.log(`    ${chalk.hex(theme.secondary)('/track')}        : Voir l'état du track Conductor actif`);
-          console.log(`    ${chalk.hex(theme.secondary)('/track state')}    : Interface interactive d'exploration des tracks`);
-          console.log(`    ${chalk.hex(theme.secondary)('/security audit')} : Lancer un audit de securite du code`);
-          console.log(`    ${chalk.hex(theme.secondary)('/approve')}        : Valider le plan (débloquer le codage)`);
-          console.log(`    ${chalk.hex(theme.secondary)('/archive')}      : Terminer et archiver le track`);
-          console.log(`    ${chalk.hex(theme.secondary)('/files')}        : Lister les fichiers consultés`);
-          console.log(`    ${chalk.hex(theme.secondary)('/tokens')}       : Afficher l'utilisation et le coût`);
-          console.log(`    ${chalk.hex(theme.secondary)('/model <id>')}   : Changer de modèle (flash, standard, zuri)`);
-          console.log(`    ${chalk.hex(theme.secondary)('/save [name]')}   : Sauvegarder la session`);
-          console.log(`    ${chalk.hex(theme.secondary)('/checkpoint')}     : Créer un checkpoint de session`);
-          console.log(`    ${chalk.hex(theme.secondary)('/clear')}        : Effacer l'historique`);
-          console.log(`    ${chalk.hex(theme.secondary)('/welcome')}      : Rejouer le tutoriel interactif`);
-          console.log(`    ${chalk.hex(theme.secondary)('/setup')}        : Relancer la configuration initiale`);
-          console.log(`    ${chalk.hex(theme.secondary)('/exit')}         : Quitter le chat\n`);
-          rl.prompt();
-          rl.write('/');
-        }
+      } else if (!isProcessing && str === '/' && rl.line === '') {
+        process.stdout.write('\r\x1b[K');
+        console.log(chalk.hex(theme.primary).bold('\n  COMMANDES DISPONIBLES :'));
+        console.log(`    ${chalk.hex(theme.secondary)('/track')}        : Voir l\'etat du track Conductor actif`);
+        console.log(`    ${chalk.hex(theme.secondary)('/track state')}    : Interface interactive d\'exploration des tracks`);
+        console.log(`    ${chalk.hex(theme.secondary)('/security audit')} : Lancer un audit de securite du code`);
+        console.log(`    ${chalk.hex(theme.secondary)('/approve')}        : Valider le plan (debloquer le codage)`);
+        console.log(`    ${chalk.hex(theme.secondary)('/archive')}      : Terminer et archiver le track`);
+        console.log(`    ${chalk.hex(theme.secondary)('/files')}        : Lister les fichiers consultes`);
+        console.log(`    ${chalk.hex(theme.secondary)('/tokens')}       : Afficher l\'utilisation et le cout`);
+        console.log(`    ${chalk.hex(theme.secondary)('/model <id>')}   : Changer de modele (flash, standard, zuri)`);
+        console.log(`    ${chalk.hex(theme.secondary)('/save [name]')}   : Sauvegarder la session`);
+        console.log(`    ${chalk.hex(theme.secondary)('/checkpoint')}     : Creer un checkpoint de session`);
+        console.log(`    ${chalk.hex(theme.secondary)('/clear')}        : Effacer l\'historique`);
+        console.log(`    ${chalk.hex(theme.secondary)('/welcome')}      : Rejouer le tutoriel interactif`);
+        console.log(`    ${chalk.hex(theme.secondary)('/setup')}        : Relancer la configuration initiale`);
+        console.log(`    ${chalk.hex(theme.secondary)('/exit')}         : Quitter le chat\n`);
+        rl.prompt();
+        rl.write('/');
       }
     };
 
