@@ -28,8 +28,11 @@ import { BatchReplaceTool } from './batch-replace.tool';
 import { DiffPreviewTool } from './diff-preview.tool';
 import { ProjectSummaryTool } from './project-summary.tool';
 import { GitCommitTool } from './git-commit.tool';
+import { AtomicSectionReplaceTool } from './atomic-section-replace.tool';
+import { BatchImportAddTool } from './batch-import-add.tool';
+import { ValidateFileTool } from './validate-file.tool';
 
-// Outils "purs" (lecture seule) dont les résultats sont mis en cache (TTL 30s)
+// Outils "purs" (lecture seule) dont les resultats sont mis en cache (TTL 30s)
 const CACHED_TOOLS = new Set([
   'read_file', 'read_file_range', 'inspect_file', 'code_map',
   'git_diff', 'list_directory'
@@ -45,7 +48,10 @@ export const TOOLS_DEFINITIONS: ToolDefinition[] = [
   ConductorValidatePlanTool.definition, SmartReadTool.definition,
   WorkspaceIndexTool.definition, BatchReplaceTool.definition,
   DiffPreviewTool.definition, ProjectSummaryTool.definition,
-  GitCommitTool.definition
+  GitCommitTool.definition,
+  AtomicSectionReplaceTool.definition,
+  BatchImportAddTool.definition,
+  ValidateFileTool.definition
 ];
 
 export class ToolExecutor {
@@ -53,7 +59,7 @@ export class ToolExecutor {
     const guard = this.guardConductor(name, args);
     if (!guard.ok) return guard;
 
-    // Vérification du cache pour les outils read-only
+    // Verification du cache pour les outils read-only
     if (CACHED_TOOLS.has(name)) {
       const cacheKey = toolCache.makeKey(name, args);
       const cached = toolCache.get(cacheKey);
@@ -125,7 +131,7 @@ export class ToolExecutor {
           result = await ConductorValidatePlanTool.run(args as { confirmation: boolean });
           break;
         case 'smart_read':
-          result = await SmartReadTool.run(args as { path: string; mode?: 'outline' | 'summary' });
+          result = await SmartReadTool.run(args as { path: string; mode?: 'outline' | 'summary' | 'jsx' });
           break;
         case 'workspace_index':
           result = await WorkspaceIndexTool.run(args as { query: string; symbolOnly?: boolean });
@@ -143,16 +149,41 @@ export class ToolExecutor {
         case 'git_commit':
           result = await GitCommitTool.run(args as { message: string; files?: string[]; all?: boolean });
           break;
+        case 'atomic_section_replace':
+          result = await AtomicSectionReplaceTool.run(args as { path: string; start_marker: string; end_marker: string; new_content: string; inclusive?: boolean });
+          toolCache.invalidatePath((args as { path: string }).path);
+          break;
+        case 'batch_import_add':
+          result = await BatchImportAddTool.run(args as { symbol: string; import_path: string; file_pattern: string; import_type?: 'named' | 'default' | 'namespace' | 'require'; alias?: string });
+          break;
+        case 'validate_file':
+          result = await ValidateFileTool.run(args as { path: string });
+          break;
         default:
           return err(new ImaraError(ErrorCategory.UNKNOWN, 'TOOL_UNKNOWN', `Tool inconnu: ${name}`));
       }
 
-      // Mise en cache du résultat pour les outils read-only
+      // Auto-validation post-ecriture (activee via env IMARA_AUTO_VALIDATE=1)
+      if (process.env.IMARA_AUTO_VALIDATE === '1' || process.env.IMARA_AUTO_VALIDATE === 'true') {
+        const writeTools = new Set(['write_file', 'append_file', 'replace_in_file', 'batch_replace', 'atomic_section_replace']);
+        if (writeTools.has(name) && args && typeof (args as any).path === 'string') {
+          try {
+            const filePath = (args as any).path;
+            const validation = await ValidateFileTool.validateFile(filePath);
+            if (!validation.valid) {
+              result += `\n\n[AUTO-VALIDATION] ${validation.message}`;
+            }
+          } catch {
+            // Silencieux - ne pas bloquer l'ecriture pour une erreur de validation
+          }
+        }
+      }
+
+      // Mise en cache du resultat pour les outils read-only
       if (CACHED_TOOLS.has(name)) {
         const cacheKey = toolCache.makeKey(name, args);
         toolCache.set(cacheKey, result);
       }
-
       return ok(result);
     } catch (reason) {
       return err(fromUnknown(reason));
@@ -160,9 +191,10 @@ export class ToolExecutor {
   }
 
   private static guardConductor(name: string, args?: ToolArguments): Result<void, ImaraError> {
-    const dangerous = new Set(['write_file', 'append_file', 'replace_in_file', 'run_command', 'batch_replace']);
+    const dangerous = new Set(['write_file', 'append_file', 'replace_in_file', 'run_command', 'batch_replace', 'atomic_section_replace', 'batch_import_add']);
     const exempted = new Set(['git_commit']);
     if (exempted.has(name)) return ok(undefined);
+
     const track = TrackManager.getActive();
     // Exemption : meta-fichiers Conductor (spec, plan, log du track actif)
     const targetPath = typeof args?.path === 'string' ? args.path : '';
@@ -173,6 +205,7 @@ export class ToolExecutor {
         return ok(undefined);
       }
     }
+
     if (track && !track.validated && dangerous.has(name)) {
       return err(new ImaraError(ErrorCategory.CONDUCTOR, 'TRACK_NOT_VALIDATED', `BARRIÈRE CONDUCTOR : "${name}" bloqué — plan du track non validé.`));
     }

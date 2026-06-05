@@ -7,6 +7,7 @@ import { whoamiCommand } from './commands/whoami.command';
 import { configCommand } from './commands/config.command';
 import { trackCommand } from './commands/track.command';
 import { initConductorCommand } from './commands/init-conductor.command';
+import { securityAuditCommand } from './commands/security.command';
 import { getVersion } from '../utils/version';
 import { ConfigManager } from '../config/config-manager';
 
@@ -20,16 +21,16 @@ program
 // Global Options
 program
   .option('-f, --file <path>', 'Ajouter un fichier au contexte')
-  .option('-m, --model <name>', 'Spécifier le modèle (flash, standard, zuri)')
+  .option('-m, --model <name>', 'Specifier le modele (flash, standard, zuri)')
   .option('-y, --yes', 'Confirmer automatiquement les actions dangereuses', false)
-  .option('--no-execute', 'Ne pas exécuter les commandes proposées', false)
-  .option('--max-tokens <number>', 'Limite de tokens par requête', '8192')
+  .option('--no-execute', 'Ne pas executer les commandes proposees', false)
+  .option('--max-tokens <number>', 'Limite de tokens par requete', '8192')
   .option('--context-depth <number>', 'Profondeur de l\'analyse de projet', '2')
   .option('--setup', 'Lancer la configuration interactif initiale', false);
 
 // Default action: one-shot prompt
 program
-  .argument('[prompt]', 'Le prompt à envoyer à l\'IA')
+  .argument('[prompt]', 'Le prompt a envoyer a l\'IA')
   .action(async (prompt, options) => {
     if (options.setup) {
       const { runSetupWizard } = await import('./wizard');
@@ -55,7 +56,7 @@ program
 // Subcommands
 program
   .command('chat')
-  .description('Démarrer une session de chat interactive')
+  .description('Demarrer une session de chat interactive')
   .option('--resume <session-id>', 'Reprendre une session existante')
   .action(async (options) => {
     const globalOpts = program.opts();
@@ -70,39 +71,51 @@ program
 
 program
   .command('login')
-  .description('Se connecter à Imara AI')
-  .option('--key <api-key>', 'Clé API Imara')
+  .description('Se connecter a Imara AI')
+  .option('--key <api-key>', 'Cle API Imara')
   .action(async (options) => await loginCommand(options));
 
 program
   .command('logout')
-  .description('Se déconnecter et supprimer la clé API')
+  .description('Se deconnecter et supprimer la cle API')
   .action(async () => await logoutCommand());
 
 program
   .command('whoami')
-  .description('Afficher les informations de l\'utilisateur connecté')
+  .description('Afficher les informations de l\'utilisateur connecte')
   .action(async () => await whoamiCommand());
 
 program
   .command('config')
-  .description('Gérer la configuration locale')
+  .description('Gerer la configuration locale')
   .argument('<action>', 'Action (set, get, list, reset)')
-  .argument('[key]', 'Clé de configuration')
+  .argument('[key]', 'Cle de configuration')
   .argument('[value]', 'Valeur de configuration')
   .action(async (action, key, value) => await configCommand(action, key, value));
 
 program
   .command('track')
-  .description('Gérer le suivi de projet (Conductor intégré)')
-  .argument('<action>', 'Action (init, new, status, list, done)')
-  .argument('[arg]', 'Titre du track (pour `new`) ou ID partiel (pour `done`)')
+  .description('Gerer le suivi de projet (Conductor integre)')
+  .argument('<action>', 'Action (init, new, state, status, list, done)')
+  .argument('[arg]', 'Titre du track (pour new) ou ID partiel (pour done)')
   .action(async (action, arg) => await trackCommand(action, arg));
 
 program
   .command('init-conductor')
-  .description('Initialiser la méthodologie Conductor dans le projet')
+  .description('Initialiser la methodologie Conductor dans le projet')
   .action(async () => await initConductorCommand());
 
-export { program };
+program
+  .command('security')
+  .description('Analyser la securite du code')
+  .argument('<action>', 'Action (audit)')
+  .option('--quick', 'Analyse rapide (fichiers modifies recemment)')
+  .action(async (action, options) => {
+    if (action === 'audit') {
+      await securityAuditCommand({ quick: options.quick });
+    } else {
+      console.log('Action inconnue. Utilisez : imara security audit');
+    }
+  });
 
+export { program };

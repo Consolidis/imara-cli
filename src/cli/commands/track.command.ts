@@ -4,10 +4,10 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { TrackManager } from '../../context/conductor/track-manager';
 import { theme } from '../../ui/theme';
+import { showTrackStateMenu } from '../../ui/components/track-state';
 
 export async function trackCommand(action: string, arg?: string) {
   switch (action) {
-
     // ── imara track new <titre> ──────────────────────────────────────────
     case 'new': {
       let title = arg;
@@ -19,13 +19,11 @@ export async function trackCommand(action: string, arg?: string) {
         });
         title = await prompt.run();
       }
-
       const { Input: InputLong } = require('enquirer');
       const goalPrompt = new InputLong({
         message: 'Objectif principal de ce track'
       });
       const goal = await goalPrompt.run();
-
       const track = TrackManager.newTrack(title!);
       
       // Update index.md with the goal
@@ -34,12 +32,10 @@ export async function trackCommand(action: string, arg?: string) {
         const content = fs.readFileSync(indexPath, 'utf-8');
         fs.writeFileSync(indexPath, content.replace('(À compléter)', goal || 'Objectif non défini'), 'utf-8');
       }
-
       console.log(chalk.hex(theme.accent)(`\n  Track actif : ${track.id}`));
       console.log(chalk.hex(theme.muted)(`  Fichiers créés et pré-remplis dans ${path.relative(process.cwd(), track.dir)}/\n`));
       break;
     }
-
     // ── imara track status ───────────────────────────────────────────────
     case 'status': {
       const { track, plan, recentLog } = TrackManager.status();
@@ -47,10 +43,8 @@ export async function trackCommand(action: string, arg?: string) {
         console.log(chalk.hex(theme.muted)('\n  Aucun track actif. Lancez `imara track new "<titre>`.\n'));
         break;
       }
-
       console.log(`\n  ${chalk.hex(theme.primary).bold('TRACK ACTIF')} : ${chalk.hex(theme.accent)(track.id)}`);
       console.log(`  ${chalk.hex(theme.muted)(track.title)}\n`);
-
       // Show tasks from plan.md
       const tasks = plan.split('\n').filter(l => l.match(/^\s*- \[[ x~]\]/));
       if (tasks.length > 0) {
@@ -65,7 +59,6 @@ export async function trackCommand(action: string, arg?: string) {
         });
         console.log('');
       }
-
       // Show last 5 log entries
       const lastLines = recentLog.split('\n').filter(l => l.startsWith('- [')).slice(-5);
       if (lastLines.length > 0) {
@@ -75,7 +68,11 @@ export async function trackCommand(action: string, arg?: string) {
       }
       break;
     }
-
+    // ── imara track state ────────────────────────────────────────────────
+    case 'state': {
+      await showTrackStateMenu();
+      break;
+    }
     // ── imara track list ─────────────────────────────────────────────────
     case 'list': {
       const tracks = TrackManager.list();
@@ -93,7 +90,6 @@ export async function trackCommand(action: string, arg?: string) {
       console.log('');
       break;
     }
-
     // ── imara track done <id_partiel> ────────────────────────────────────
     case 'done': {
       const active = TrackManager.getActive();
@@ -117,7 +113,6 @@ export async function trackCommand(action: string, arg?: string) {
       }
       break;
     }
-
     // ── imara track implement <id> ───────────────────────────────────────
     case 'implement': {
       if (!arg) {
@@ -135,7 +130,6 @@ export async function trackCommand(action: string, arg?: string) {
         console.log(chalk.dim('Utilisez `imara track list` pour voir les IDs disponibles.'));
         break;
       }
-
       const tracksDir = TrackManager.getTracksDir();
       const trackDir = path.join(tracksDir, target);
       
@@ -147,19 +141,16 @@ export async function trackCommand(action: string, arg?: string) {
         const match = content.match(/^# Track \d+ — (.*)$/m);
         if (match) title = match[1];
       }
-
       TrackManager.setActive({ id: target, title, dir: trackDir, validated: false });
       
       console.log(chalk.hex(theme.accent)(`\n  Track "${target}" activé pour implémentation.`));
       console.log(chalk.hex(theme.muted)('  Lancement de l\'analyse automatique...\n'));
-
       // Forward to chat command with initial prompt
       const { chatCommand } = require('./chat.command');
       const relDir = path.relative(process.cwd(), trackDir).replace(/\\/g, '/');
-      await chatCommand({}, `Je souhaite implémenter le track "${target}". Analyse le projet (regarde dans ./${relDir} pour le plan et les specs, et dans le reste du projet pour le code) et propose un plan détaillé.`); 
+      await chatCommand({}, `Je souhaite implémenter le track "${target}". Analyse le projet (regarde dans ./${relDir} pour le plan et les specs, et dans le reste du projet pour le code) et propose un plan détaillé.`);
       break;
     }
-
     case 'help':
     default: {
       console.log(`\n  ${chalk.hex(theme.primary).bold('SYSTÈME DE TRACKS (Conductor)')}`);
@@ -169,20 +160,19 @@ export async function trackCommand(action: string, arg?: string) {
       console.log('    1. Un track représente une fonctionnalité ou un bug spécifique.');
       console.log('    2. L\'IA accède aux fichiers du track (.imara/conductor/) pour garder le contexte.');
       console.log('    3. Toutes les actions (tool calls) sont logguées automatiquement.\n');
-
       console.log(chalk.hex(theme.secondary).bold('  COMMANDES :'));
       console.log(`    ${chalk.hex(theme.accent)('imara init-conductor')}      Installer le framework dans le projet`);
       console.log(`    ${chalk.hex(theme.accent)('imara track new <titre>')}   Créer un nouvel objectif de travail`);
       console.log(`    ${chalk.hex(theme.accent)('imara track implement <id>')} Lancer le chat sur un track spécifique`);
-      console.log(`    ${chalk.hex(theme.accent)('imara track status')}        Voir l'avancement et les tâches du plan`);
+      console.log(`    ${chalk.hex(theme.accent)('imara track state')}         Interface interactive d\'exploration des tracks`);
+      console.log(`    ${chalk.hex(theme.accent)('imara track status')}        Voir l\'avancement et les tâches du plan`);
       console.log(`    ${chalk.hex(theme.accent)('imara track list')}          Lister tous les tracks du projet`);
       console.log(`    ${chalk.hex(theme.accent)('imara track done')}          Marquer la tâche courante comme finie\n`);
-
       console.log(chalk.hex(theme.secondary).bold('  FLUX DE TRAVAIL :'));
       console.log('    $ imara init-conductor');
       console.log('    $ imara track new "Ajouter authentification"');
-      console.log('    $ imara chat');
-      console.log('    › Aide moi à implémenter le login...\n');
+      console.log('    $ imara track state');
+      console.log('    › Parcourir les tracks, le plan, la spec...\n');
       break;
     }
   }

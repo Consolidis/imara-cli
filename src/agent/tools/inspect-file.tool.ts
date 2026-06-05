@@ -42,9 +42,20 @@ export class InspectFileTool {
     const lineCount = lines.length;
     const sizeBytes = stats.size;
 
+    // Detection du type de line ending
+    const crlfCount = (content.match(/\r\n/g) || []).length;
+    const lfCount = (content.match(/[^\r]\n/g) || []).length + (content.startsWith('\n') ? 1 : 0);
+    let lineEndingType = 'LF';
+    if (crlfCount > 0 && lfCount > 0) {
+      lineEndingType = 'MIXTE (CRLF + LF)';
+    } else if (crlfCount > 0) {
+      lineEndingType = 'CRLF';
+    }
+
     let response = `=== Inspection de ${args.path} ===\n`;
     response += `Taille : ${(sizeBytes / 1024).toFixed(2)} KB (${sizeBytes} octets)\n`;
     response += `Lignes : ${lineCount} lignes\n`;
+    response += `Line endings : ${lineEndingType}\n`;
 
     if (args.query) {
       const q = args.query.trim();

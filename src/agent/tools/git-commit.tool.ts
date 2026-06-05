@@ -12,15 +12,15 @@ interface GitRepo {
 }
 
 /**
- * Découvre tous les dépôts Git accessibles depuis le répertoire courant :
- * - Remonte jusqu'à 3 niveaux de parents pour trouver un .git racine
- * - Scanne les sous-dossiers immédiats (depth 1) pour trouver des sous-repos
+ * Decouvre tous les depots Git accessibles depuis le repertoire courant :
+ * - Remonte jusqu'a 3 niveaux de parents pour trouver un .git racine
+ * - Scanne les sous-dossiers immediats (depth 1) pour trouver des sous-repos
  */
 function discoverGitRepos(): GitRepo[] {
   const repos: GitRepo[] = [];
   const root = process.cwd();
 
-  // 1. Vérifier les dossiers parents (monorepo : CLI lancée depuis un sous-dossier)
+  // 1. Verifier les dossiers parents (monorepo : CLI lancee depuis un sous-dossier)
   let currentDir = root;
   for (let i = 0; i < 3; i++) {
     const gitDir = join(currentDir, '.git');
@@ -39,7 +39,7 @@ function discoverGitRepos(): GitRepo[] {
     currentDir = parent;
   }
 
-  // 2. Scanner les sous-dossiers immédiats pour des sous-repos
+  // 2. Scanner les sous-dossiers immediats pour des sous-repos
   try {
     const items = readdirSync(root);
     for (const item of items) {
@@ -48,7 +48,7 @@ function discoverGitRepos(): GitRepo[] {
       if (existsSync(fullPath) && statSync(fullPath).isDirectory()) {
         const subGit = join(fullPath, '.git');
         if (existsSync(subGit) && statSync(subGit).isDirectory()) {
-          // Éviter les doublons
+          // Eviter les doublons
           if (repos.some(r => r.path === fullPath)) continue;
           const info = getGitInfoForPath(fullPath);
           repos.push({
@@ -80,34 +80,32 @@ function getGitInfoForPath(dirPath: string): { branch: string; status: string } 
 }
 
 /**
- * Exécute un git commit dans le répertoire donné.
- * Ajoute les fichiers spécifiés ou tout le dossier si aucun fichier donné.
+ * Execute un git commit dans le repertoire donne.
+ * Ajoute les fichiers specifies ou tout le dossier si aucun fichier donne.
  */
 function commitInRepo(repoPath: string, message: string, files?: string[]): string {
   const addCmd = files && files.length > 0
     ? `git add ${files.map(f => `"${f}"`).join(' ')}`
     : 'git add -A';
 
-  // Exécuter git add
+  // Executer git add
   try {
     execSync(addCmd, { cwd: repoPath, stdio: ['ignore', 'pipe', 'ignore'] });
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e);
-    throw new Error(`Échec git add dans ${repoPath}: ${errMsg}`);
+    throw new Error(`Echec git add dans ${repoPath}: ${errMsg}`);
   }
 
-  // Vérifier qu'il y a quelque chose à commiter
+  // Verifier qu'il y a quelque chose a commiter
   const status = execSync('git status --short', {
     cwd: repoPath, stdio: ['ignore', 'pipe', 'ignore']
   }).toString().trim();
-
   if (!status) {
-    return `Rien à commiter dans ${repoPath} (arbre propre).`;
+    return `Rien a commiter dans ${repoPath} (arbre propre).`;
   }
 
-  // Exécuter git commit
+  // Executer git commit
   try {
-    // Utiliser l'entrée standard pour passer le message (évite les problèmes de guillemets)
     execSync(`git commit -F -`, {
       cwd: repoPath,
       input: message,
@@ -117,26 +115,25 @@ function commitInRepo(repoPath: string, message: string, files?: string[]): stri
     const result = execSync('git log --oneline -n 1', {
       cwd: repoPath, stdio: ['ignore', 'pipe', 'ignore']
     }).toString().trim();
-    return `Commit réussi dans ${repoPath}: ${result}`;
+    return `Commit reussi dans ${repoPath}: ${result}`;
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e);
-    // Cas particulier : rien à commit malgré le add (fichiers ignorés, etc.)
+    // Cas particulier : rien a commit malgre le add (fichiers ignores, etc.)
     if (errMsg.includes('nothing to commit') || errMsg.includes('nothing added')) {
-      return `Rien à commiter dans ${repoPath} après add.`;
+      return `Rien a commiter dans ${repoPath} apres add.`;
     }
-    throw new Error(`Échec git commit dans ${repoPath}: ${errMsg}`);
+    throw new Error(`Echec git commit dans ${repoPath}: ${errMsg}`);
   }
 }
 
-// --- Définition de l'outil ---
-
+// --- Definition de l'outil ---
 export const GitCommitTool: {
   definition: ToolDefinition;
   run(args: { message: string; files?: string[]; all?: boolean }): Promise<string>;
 } = {
   definition: {
     name: 'git_commit',
-    description: 'Crée un commit Git. Détecte automatiquement le dépôt courant (dossier parent ou sous-dossier). Si all=true, commit dans TOUS les dépôts modifiés découverts.',
+    description: 'Cree un commit Git. Detecte automatiquement le depot courant (dossier parent ou sous-dossier). Si all=true, commit dans TOUS les depots modifies decouverts.',
     parameters: {
       type: 'object',
       properties: {
@@ -147,18 +144,17 @@ export const GitCommitTool: {
         files: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Fichiers spécifiques à ajouter (optionnel). Si absent, tous les fichiers modifiés sont ajoutés (git add -A)'
+          description: 'Fichiers specifiques a ajouter (optionnel). Si absent, tous les fichiers modifies sont ajoutes (git add -A)'
         },
         all: {
           type: 'boolean',
-          description: 'Si true, commit dans tous les dépôts modifiés découverts automatiquement. Si false (defaut), commit uniquement dans le dépôt courant.',
+          description: 'Si true, commit dans tous les depots modifies decouverts automatiquement. Si false (defaut), commit uniquement dans le depot courant.',
           default: false
         }
       },
       required: ['message']
     }
   },
-
   async run(args: { message: string; files?: string[]; all?: boolean }): Promise<string> {
     const { message, files, all } = args;
     if (!message || !message.trim()) {
@@ -169,53 +165,42 @@ export const GitCommitTool: {
     const cleanMessage = message.trim();
 
     if (repos.length === 0) {
-      throw new Error('Aucun dépôt Git trouvé. Vérifiez que vous êtes dans un projet Git (ou un sous-dossier avec un parent .git).');
+      throw new Error('Aucun depot Git trouve. Verifiez que vous etes dans un projet Git (ou un sous-dossier avec un parent .git).');
     }
 
     if (all) {
-      // Commit dans tous les repos modifiés
+      // Commit dans tous les repos modifies -- silencieux pour les repos propres
       const results: string[] = [];
       let anyCommited = false;
-
       for (const repo of repos) {
-        if (!repo.hasChanges) {
-          results.push(`${repo.name}: arbre propre, aucun commit nécessaire.`);
-          continue;
-        }
+        if (!repo.hasChanges) continue; // Ignorer silencieusement les repos propres
         const result = commitInRepo(repo.path, cleanMessage, files);
         results.push(`${repo.name}: ${result}`);
         anyCommited = true;
       }
-
       if (!anyCommited) {
-        return 'Aucun dépôt avec des modifications à commiter.';
+        return ''; // Rien a commiter -- pas de message
       }
-
       return results.join('\n');
     } else {
-      // Commit dans le dépôt courant uniquement
+      // Commit dans le depot courant uniquement
       // 1. Si le cwd est directement un repo, on l'utilise
       let targetRepo = repos.find(r => r.path === process.cwd());
-
-      // 2. Sinon, prendre le premier repo parent trouvé
+      // 2. Sinon, prendre le premier repo parent trouve
       if (!targetRepo) {
         targetRepo = repos.find(r => r.name.includes('(Parent)'));
       }
-
       // 3. Sinon, prendre le premier repo avec des changements
       if (!targetRepo) {
         targetRepo = repos.find(r => r.hasChanges);
       }
-
       // 4. Dernier recours : premier repo de la liste
       if (!targetRepo) {
         targetRepo = repos[0];
       }
-
       if (!targetRepo.hasChanges) {
-        return `Aucune modification à commiter dans ${targetRepo.name}. Utilisez all=true pour commiter tous les dépôts.`;
+        return '';
       }
-
       return commitInRepo(targetRepo.path, cleanMessage, files);
     }
   }

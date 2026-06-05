@@ -158,18 +158,20 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
           // Clear current line
           process.stdout.write('\r\x1b[K');
           console.log(chalk.hex(theme.primary).bold('\n  COMMANDES DISPONIBLES :'));
-          console.log(`    ${chalk.hex(theme.secondary)('/track')}      : Voir l'état du track Conductor actif`);
-          console.log(`    ${chalk.hex(theme.secondary)('/approve')}    : Valider le plan (débloquer le codage)`);
-          console.log(`    ${chalk.hex(theme.secondary)('/archive')}    : Terminer et archiver le track`);
-          console.log(`    ${chalk.hex(theme.secondary)('/files')}      : Lister les fichiers consultés`);
-          console.log(`    ${chalk.hex(theme.secondary)('/tokens')}     : Afficher l'utilisation et le coût`);
-          console.log(`    ${chalk.hex(theme.secondary)('/model <id>')} : Changer de modèle (flash, standard, zuri)`);
-          console.log(`    ${chalk.hex(theme.secondary)('/save [name]')} : Sauvegarder la session`);
-          console.log(`    ${chalk.hex(theme.secondary)('/checkpoint')}   : Créer un checkpoint de session`);
-          console.log(`    ${chalk.hex(theme.secondary)('/clear')}      : Effacer l'historique`);
-          console.log(`    ${chalk.hex(theme.secondary)('/welcome')}    : Rejouer le tutoriel interactif`);
-          console.log(`    ${chalk.hex(theme.secondary)('/setup')}      : Relancer la configuration initiale`);
-          console.log(`    ${chalk.hex(theme.secondary)('/exit')}       : Quitter le chat\n`);
+          console.log(`    ${chalk.hex(theme.secondary)('/track')}        : Voir l'état du track Conductor actif`);
+          console.log(`    ${chalk.hex(theme.secondary)('/track state')}    : Interface interactive d'exploration des tracks`);
+          console.log(`    ${chalk.hex(theme.secondary)('/security audit')} : Lancer un audit de securite du code`);
+          console.log(`    ${chalk.hex(theme.secondary)('/approve')}        : Valider le plan (débloquer le codage)`);
+          console.log(`    ${chalk.hex(theme.secondary)('/archive')}      : Terminer et archiver le track`);
+          console.log(`    ${chalk.hex(theme.secondary)('/files')}        : Lister les fichiers consultés`);
+          console.log(`    ${chalk.hex(theme.secondary)('/tokens')}       : Afficher l'utilisation et le coût`);
+          console.log(`    ${chalk.hex(theme.secondary)('/model <id>')}   : Changer de modèle (flash, standard, zuri)`);
+          console.log(`    ${chalk.hex(theme.secondary)('/save [name]')}   : Sauvegarder la session`);
+          console.log(`    ${chalk.hex(theme.secondary)('/checkpoint')}     : Créer un checkpoint de session`);
+          console.log(`    ${chalk.hex(theme.secondary)('/clear')}        : Effacer l'historique`);
+          console.log(`    ${chalk.hex(theme.secondary)('/welcome')}      : Rejouer le tutoriel interactif`);
+          console.log(`    ${chalk.hex(theme.secondary)('/setup')}        : Relancer la configuration initiale`);
+          console.log(`    ${chalk.hex(theme.secondary)('/exit')}         : Quitter le chat\n`);
           rl.prompt();
           rl.write('/');
         }
@@ -350,18 +352,20 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
 
       if (input === '/help') {
         console.log(chalk.hex(theme.primary).bold('\n  COMMANDES DU CHAT :'));
-        console.log(`    ${chalk.hex(theme.secondary)('/track')}      : Voir l'état du track Conductor actif`);
-        console.log(`    ${chalk.hex(theme.secondary)('/approve')}    : Valider le plan (débloquer le codage)`);
-        console.log(`    ${chalk.hex(theme.secondary)('/archive')}    : Terminer et archiver le track`);
-        console.log(`    ${chalk.hex(theme.secondary)('/files')}      : Lister les fichiers consultés`);
-        console.log(`    ${chalk.hex(theme.secondary)('/tokens')}     : Afficher l'utilisation et le coût`);
-        console.log(`    ${chalk.hex(theme.secondary)('/model <id>')} : Changer de modèle (flash, standard, zuri)`);
-        console.log(`    ${chalk.hex(theme.secondary)('/save [name]')} : Sauvegarder la session`);
-        console.log(`    ${chalk.hex(theme.secondary)('/checkpoint')}   : Créer un checkpoint de session`);
-        console.log(`    ${chalk.hex(theme.secondary)('/clear')}      : Effacer l'historique`);
-        console.log(`    ${chalk.hex(theme.secondary)('/welcome')}    : Rejouer le tutoriel interactif`);
-        console.log(`    ${chalk.hex(theme.secondary)('/setup')}      : Relancer la configuration initiale`);
-        console.log(`    ${chalk.hex(theme.secondary)('/exit')}       : Quitter le chat\n`);
+        console.log(`    ${chalk.hex(theme.secondary)('/track')}        : Voir l'état du track Conductor actif`);
+        console.log(`    ${chalk.hex(theme.secondary)('/track state')}    : Interface interactive d'exploration des tracks`);
+        console.log(`    ${chalk.hex(theme.secondary)('/security audit')} : Lancer un audit de securite du code`);
+        console.log(`    ${chalk.hex(theme.secondary)('/approve')}        : Valider le plan (débloquer le codage)`);
+        console.log(`    ${chalk.hex(theme.secondary)('/archive')}      : Terminer et archiver le track`);
+        console.log(`    ${chalk.hex(theme.secondary)('/files')}        : Lister les fichiers consultés`);
+        console.log(`    ${chalk.hex(theme.secondary)('/tokens')}       : Afficher l'utilisation et le coût`);
+        console.log(`    ${chalk.hex(theme.secondary)('/model <id>')}   : Changer de modèle (flash, standard, zuri)`);
+        console.log(`    ${chalk.hex(theme.secondary)('/save [name]')}   : Sauvegarder la session`);
+        console.log(`    ${chalk.hex(theme.secondary)('/checkpoint')}     : Créer un checkpoint de session`);
+        console.log(`    ${chalk.hex(theme.secondary)('/clear')}        : Effacer l'historique`);
+        console.log(`    ${chalk.hex(theme.secondary)('/welcome')}      : Rejouer le tutoriel interactif`);
+        console.log(`    ${chalk.hex(theme.secondary)('/setup')}        : Relancer la configuration initiale`);
+        console.log(`    ${chalk.hex(theme.secondary)('/exit')}         : Quitter le chat\n`);
         
         console.log(chalk.hex(theme.primary).bold('  MÉTHODOLOGIE CONDUCTOR :'));
         console.log('    Imara suit une approche structurée pour les tâches complexes :');
@@ -378,6 +382,22 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         return;
       }
 
+      if (input === '/security audit') {
+        const { securityAuditCommand } = require('../../cli/commands/security.command');
+        rl.pause();
+        await securityAuditCommand({ quick: false });
+        rl.resume();
+        rl.prompt();
+        return;
+      }
+      if (input === '/track state') {
+        const { showTrackStateMenu } = require('../../ui/components/track-state');
+        rl.pause();
+        await showTrackStateMenu();
+        rl.resume();
+        rl.prompt();
+        return;
+      }
       if (input === '/track') {
         const status = TrackManager.status();
 
