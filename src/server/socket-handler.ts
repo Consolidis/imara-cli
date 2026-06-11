@@ -44,22 +44,30 @@ export function setupSocketHandlers(
   io.on('connection', (socket: Socket) => {
     console.log(`[Browser IDE] Client connecté: ${socket.id}`);
 
-    // --- LIST DIRECTORY : Renvoie l'arborescence du projet ---
+    // --- LIST DIRECTORY : Renvoie l'arborescence du projet ---    // --- LIST DIRECTORY : Renvoie l'arborescence du projet ---
     socket.on('list-directory', async (_data: unknown, callback?: (nodes: FileNode[]) => void) => {
       try {
         const rootPath = process.cwd();
+        console.log(`[Browser IDE] Construction arborescence depuis: ${rootPath}`);
         const tree = await buildFileTree(rootPath, rootPath, 0);
+        console.log(`[Browser IDE] Arborescence construite: ${tree.length} elements racine`);
         if (typeof callback === 'function') {
           callback(tree);
         } else {
           socket.emit('directory-listing', tree);
         }
       } catch (err: any) {
-        socket.emit('error', { code: 'LIST_ERROR', message: err.message });
+        console.error(`[Browser IDE] Erreur construction arborescence: ${err.message}`);
+        // Envoyer un tableau vide via le callback pour ne pas bloquer le client
+        if (typeof callback === 'function') {
+          callback([]);
+        } else {
+          socket.emit('error', { code: 'LIST_ERROR', message: err.message });
+        }
       }
     });
 
-    // --- READ FILE : Lit un fichier sur le disque ---
+    // --- READ FILE : Lit un fichier sur le disque ---    // --- READ FILE : Lit un fichier sur le disque ---
     socket.on('read-file', async (data: { path: string }, callback?: (result: any) => void) => {
       try {
         const safePath = validatePath(data.path);
@@ -121,13 +129,11 @@ export function setupSocketHandlers(
       }
     });
 
-    // --- CHAT MESSAGE : Transmet le message à l'agent ---    // --- CHANGE MODEL : Recoit le changement de modele depuis l'UI ---    // --- CHANGE MODEL : Recoit le changement de modele depuis l'UI ---
+    // --- CHAT MESSAGE : Transmet le message à l'agent ---    // --- CHANGE MODEL : Recoit le changement de modele depuis l'UI ---
     socket.on('change-model', (data: { model: string }) => {
       console.log(`[Socket/change-model] Client ${socket.id} change de modele: "${data.model}"`);
-      // Stocker le modele pour ce socket via BrowserAgentBridge
       const { BrowserAgentBridge } = require('./browser-agent');
       BrowserAgentBridge.setModelForSocket(socket.id, data.model);
-      // Accuser reception
       socket.emit('model-changed', { model: data.model, timestamp: Date.now() });
     });
 
@@ -145,7 +151,7 @@ export function setupSocketHandlers(
       }
     });
 
-    // --- STOP GENERATION : Interrompt l'agent ---    // --- STOP GENERATION : Interrompt l'agent ---
+    // --- STOP GENERATION : Interrompt l'agent ---    // --- STOP GENERATION : Interrompt l'agent ---    // --- STOP GENERATION : Interrompt l'agent ---
     socket.on('stop-generation', (_data: unknown) => {
       console.log(`[Browser IDE] Arrêt demandé par le client: ${socket.id}`);
       socket.emit('generation-stopped', { timestamp: Date.now() });
