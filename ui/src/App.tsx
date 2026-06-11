@@ -7,13 +7,25 @@ import MonacoEditor from './components/MonacoEditor';
 import ChatPanel from './components/ChatPanel';
 import WelcomeScreen from './components/WelcomeScreen';
 import StatusBar from './components/StatusBar';
-import { FileContent } from './types';
+import { FileContent, FileNode } from './types';
 
 /** Structure d'un onglet ouvert */
 interface Tab {
   path: string;
   language: string;
   content: string | null;
+}
+
+/** Trouve le premier fichier dans l'arbre (parcours recursif) */
+function findFirstFile(nodes: FileNode[]): string | null {
+  for (const node of nodes) {
+    if (node.type === 'file') return node.path;
+    if (node.children) {
+      const found = findFirstFile(node.children);
+      if (found) return found;
+    }
+  }
+  return null;
 }
 
 const App: React.FC = () => {
@@ -26,8 +38,40 @@ const App: React.FC = () => {
   const [projectPath, setProjectPath] = useState<string>('');
   const activeTab = openTabs.find(t => t.path === activeTabPath) || null;
   const fileContentCache = useRef<Map<string, string>>(new Map());
+  const autoOpenedRef = useRef(false);
 
-  // Récupérer le chemin du projet via health check
+  // Ouvrir automatiquement le premier fichier au chargement initial de l'arbre
+  useEffect(() => {
+    if (treeLoading || tree.length === 0 || autoOpenedRef.current) return;
+    autoOpenedRef.current = true;
+    const firstPath = findFirstFile(tree);
+    if (!firstPath) return;
+    console.log(`[AutoOpen] Premier fichier: "${firstPath}"`);
+    const loadingTab: Tab = { path: firstPath, language: 'plaintext', content: null };
+    setOpenTabs(prev => [...prev, loadingTab]);
+    setActiveTabPath(firstPath);
+    if (socket) {
+      socket.emit('read-file', { path: firstPath }, (result: FileContent & { error?: string }) => {
+        if (result.error) {
+          setOpenTabs(prev =>
+            prev.map(t => t.path === firstPath
+              ? { ...t, content: `// Erreur: ${result.error}` }
+              : t)
+          );
+          return;
+        }
+        fileContentCache.current.set(firstPath, result.content);
+        setOpenTabs(prev =>
+          prev.map(t => t.path === firstPath
+            ? { ...t, content: result.content, language: result.language }
+            : t)
+        );
+        console.log(`[AutoOpen] Contenu charge: "${firstPath}" (${result.content.length} caracteres)`);
+      });
+    }
+  }, [treeLoading, tree, socket]);
+
+  // Recuperer le chemin du projet via health check
   useEffect(() => {
     if (!socket) return;
     fetch('/api/health')
@@ -42,7 +86,7 @@ const App: React.FC = () => {
   // puis ajoute l'onglet
   const handleSelectFile = useCallback((path: string) => {
     console.log(`[DEBUG handleSelectFile] Selection fichier: "${path}"`);
-    // Vérifier si déjà ouvert
+    // Verifier si deja ouvert
     const alreadyOpen = openTabs.some(t => t.path === path);
     if (alreadyOpen) {
       console.log(`[DEBUG handleSelectFile] Fichier deja ouvert, activation onglet: "${path}"`);
@@ -122,7 +166,7 @@ const App: React.FC = () => {
     });
   }, [activeTabPath]);
 
-  // Mettre à jour le contenu d'un onglet (après sauvegarde)
+  // Mettre a jour le contenu d'un onglet (apres sauvegarde)
   const handleContentChange = useCallback((path: string, content: string) => {
     setOpenTabs(prev =>
       prev.map(t => (t.path === path ? { ...t, content } : t))
@@ -130,11 +174,11 @@ const App: React.FC = () => {
     fileContentCache.current.set(path, content);
   }, []);
 
-  // Rafraîchir le contenu si l'agent modifie le fichier (file-updated)
+  // Rafraichir le contenu si l'agent modifie le fichier (file-updated)
   useEffect(() => {
     if (!socket) return;
     const handleFileUpdated = (data: { path: string; event: string }) => {
-      // Vérifier si le fichier modifié est dans les onglets ouverts
+      // Verifier si le fichier modifie est dans les onglets ouverts
       const tab = openTabs.find(t =>
         t.path === data.path || t.path.endsWith(data.path)
       );
@@ -175,7 +219,7 @@ const App: React.FC = () => {
         </div>
         <div className="status-indicator">
           <span className="status-dot" style={{ background: connected ? '#22c55e' : '#f59e0b' }} />
-          {connected ? 'Connecté' : 'Connexion...'}
+          {connected ? 'Connecte' : 'Connexion...'}
         </div>
       </div>
       {/* Main content */}
@@ -212,12 +256,12 @@ const App: React.FC = () => {
                     }}
                     title="Fermer l'onglet"
                   >
-                    ✕
+                    X
                   </span>
                 </button>
               ))}
             </div>
-            {/* Éditeur */}
+            {/* Editeur */}
             <div style={{ flex: 1, overflow: 'hidden' }}>
               <MonacoEditor
                 key={activeTab.path}
