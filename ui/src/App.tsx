@@ -8,6 +8,8 @@ import MonacoEditor from './components/MonacoEditor';
 import ChatPanel from './components/ChatPanel';
 import WelcomeScreen from './components/WelcomeScreen';
 import StatusBar from './components/StatusBar';
+import ConductorPanel from './components/ConductorPanel';
+import { useConductorData } from './hooks/useConductorData';
 import { FileContent, FileNode } from './types';
 
 interface Tab {
@@ -36,6 +38,9 @@ const App: React.FC = () => {
   const [openTabs, setOpenTabs] = useState<Tab[]>([]);
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
   const [projectPath, setProjectPath] = useState<string>('');
+  const [gitDiffCount, setGitDiffCount] = useState<number>(0);
+  const [showConductor, setShowConductor] = useState<boolean>(false);
+  const conductorData = useConductorData(socket);
   const activeTab = openTabs.find(t => t.path === activeTabPath) || null;
   const fileContentCache = useRef<Map<string, string>>(new Map());
   const autoOpenedRef = useRef(false);
@@ -140,6 +145,19 @@ const App: React.FC = () => {
     return () => { socket.off('file-updated', handleFileUpdated); };
   }, [socket, openTabs]);
 
+  const handleRequestGitDiff = useCallback(() => {
+    if (!socket) return;
+    socket.emit('request-git-diff', (result: { diff: string; status: string; error?: string }) => {
+      if (result.error) {
+        console.error('[GitDiff] Erreur:', result.error);
+        return;
+      }
+      const lines = result.diff.split('\n').filter(l => l.length > 0).length;
+      setGitDiffCount(lines);
+      alert(`Git Diff:\n\n${result.diff || '(aucune modification)'}\n\nStatus:\n${result.status || '(pas de changements)'}`);
+    });
+  }, [socket]);
+
   const projectName = projectPath
     ? projectPath.split('\\').pop()?.split('/').pop()
     : undefined;
@@ -155,6 +173,24 @@ const App: React.FC = () => {
           {projectName && (
             <span style={{ fontWeight: 400, fontSize: 11, color: '#71717a', marginLeft: 8 }}>— {projectName}</span>
           )}
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            onClick={() => setShowConductor(v => !v)}
+            style={{
+              background: showConductor ? 'var(--accent-primary)' : 'transparent',
+              color: showConductor ? 'var(--text-inverse)' : 'var(--text-muted)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 4,
+              fontSize: 11,
+              padding: '2px 8px',
+              cursor: 'pointer',
+              lineHeight: '20px',
+            }}
+            title="Panneau Conductor"
+          >
+            🛤 Conductor
+          </button>
         </div>
         <div className="status-indicator">
           <span className="status-dot" style={{ background: connected ? '#22c55e' : '#f59e0b' }} />
@@ -202,6 +238,15 @@ const App: React.FC = () => {
           <WelcomeScreen projectName={projectName} />
         )}
 
+        {showConductor && (
+          <ConductorPanel
+            data={conductorData.data}
+            loading={conductorData.loading}
+            error={conductorData.error}
+            onRefresh={conductorData.refresh}
+            onClose={() => setShowConductor(false)}
+          />
+        )}
         <ChatPanel
           messages={messages}
           onSendMessage={sendMessage}
@@ -230,6 +275,8 @@ const App: React.FC = () => {
         contextPercent={sessionStats.contextPercent}
         contextState={sessionStats.contextState}
         phase={sessionStats.phase}
+        onRequestGitDiff={handleRequestGitDiff}
+        gitDiffCount={gitDiffCount}
       />
     </div>
   );

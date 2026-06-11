@@ -62,14 +62,25 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   };
 
-  // Filtrer les messages de type "pensee" (reasoning)
-  const visibleMessages = messages.filter(msg => {
-    // Cacher les messages qui contiennent uniquement "Pensee :"
-    if (msg.role === 'assistant' && msg.content.startsWith('Pensée :')) {
-      return false;
-    }
-    return true;
-  });
+  // Detecter si un message est une pensee (reasoning)
+  function isReasoning(msg: ChatMessage): boolean {
+    return msg.type === 'reasoning'
+      || (msg.role === 'assistant' && /^[\s]*[🧠💭]/.test(msg.content))
+      || (msg.role === 'assistant' && /^[\s]*Pens[eé]e\s*:/.test(msg.content));
+  }
+  // Nettoyer TOUTES les lignes de prefixe "Pensée :" ou "🧠 Pensée :" du contenu
+  function cleanReasoningContent(raw: string): string {
+    return raw
+      .split('\n')
+      .map(line => line
+        .replace(/^[\s]*[🧠💭]\s*Pens[eé]e\s*:\s*/i, '')
+        .replace(/^[\s]*Pens[eé]e\s*:\s*/i, '')
+        .replace(/^[\s]*[🧠💭]\s*/i, '')
+      )
+      .filter(line => line.trim().length > 0)
+      .join('\n')
+      .trim();
+  }
 
   return (
     <div className="chat-panel">
@@ -115,12 +126,26 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
       {/* Messages */}
       <div className="chat-messages">
-        {visibleMessages.map((msg) => (
-          <div key={msg.id} className={`chat-msg ${msg.role}`}>
-            {msg.content}
-            <div className="timestamp">{formatTime(msg.timestamp)}</div>
-          </div>
-        ))}
+        {messages.map((msg) => {
+          // Si le message est vide apres nettoyage, on le saute completement
+          if (isReasoning(msg)) {
+            const cleanedContent = cleanReasoningContent(msg.content);
+            if (!cleanedContent) return null;
+            return (
+              <div key={msg.id} className="chat-msg reasoning">
+                <div className="reasoning-icon">🧠</div>
+                <div className="reasoning-content">{cleanedContent}</div>
+                <div className="timestamp">{formatTime(msg.timestamp)}</div>
+              </div>
+            );
+          }
+          return (
+            <div key={msg.id} className={`chat-msg ${msg.role}`}>
+              {msg.content}
+              <div className="timestamp">{formatTime(msg.timestamp)}</div>
+            </div>
+          );
+        })}
         {isProcessing && (
           <div className="chat-msg system" style={{ textAlign: 'center', fontStyle: 'normal' }}>
             ⏳ L'agent travaille...

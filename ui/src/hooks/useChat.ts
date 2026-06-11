@@ -26,11 +26,11 @@ export function useChat(socket: Socket | null): {
 
   useEffect(() => {
     if (!socket) return;
-
     const handleResponse = (data: {
       sessionId: string;
       role: 'user' | 'assistant' | 'tool' | 'system';
       content: string;
+      type?: 'reasoning' | 'response';
       timestamp: number;
     }) => {
       setMessages((prev) => [
@@ -39,11 +39,27 @@ export function useChat(socket: Socket | null): {
           id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           role: data.role,
           content: data.content,
+          type: data.type,
           timestamp: data.timestamp,
         },
       ]);
     };
-
+    const handleReasoning = (data: {
+      sessionId: string;
+      content: string;
+      timestamp: number;
+    }) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `reason_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          role: 'assistant',
+          content: data.content,
+          type: 'reasoning',
+          timestamp: data.timestamp,
+        },
+      ]);
+    };
     const handleToolCall = (data: {
       sessionId: string;
       content: string;
@@ -59,11 +75,9 @@ export function useChat(socket: Socket | null): {
         },
       ]);
     };
-
     const handleDone = () => {
       setIsProcessing(false);
     };
-
     const handleError = (data: {
       sessionId: string;
       error: string;
@@ -80,14 +94,14 @@ export function useChat(socket: Socket | null): {
         },
       ]);
     };
-
     socket.on('chat-response', handleResponse);
+    socket.on('chat-reasoning', handleReasoning);
     socket.on('chat-tool-call', handleToolCall);
     socket.on('chat-done', handleDone);
     socket.on('chat-error', handleError);
-
     return () => {
       socket.off('chat-response', handleResponse);
+      socket.off('chat-reasoning', handleReasoning);
       socket.off('chat-tool-call', handleToolCall);
       socket.off('chat-done', handleDone);
       socket.off('chat-error', handleError);
@@ -97,17 +111,14 @@ export function useChat(socket: Socket | null): {
   const sendMessage = useCallback(
     (text: string) => {
       if (!socket || !text.trim() || isProcessing) return;
-
       const userMsg: ChatMessage = {
         id: `user_${Date.now()}`,
         role: 'user',
         content: text.trim(),
         timestamp: Date.now(),
       };
-
       setMessages((prev) => [...prev, userMsg]);
       setIsProcessing(true);
-
       socket.emit('chat-message', {
         message: text.trim(),
         sessionId: sessionIdRef.current,

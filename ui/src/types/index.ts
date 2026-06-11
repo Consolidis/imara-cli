@@ -15,6 +15,7 @@ export interface ChatMessage {
   content: string;
   toolName?: string;
   toolArgs?: Record<string, unknown>;
+  type?: 'reasoning' | 'response';
   timestamp: number;
 }
 

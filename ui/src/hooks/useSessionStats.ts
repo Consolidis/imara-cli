@@ -43,15 +43,18 @@ export function useSessionStats(socket: Socket | null): SessionStats {
       setStats(data);
     };
 
-    // Declencher une mise a jour apres chaque evenement chat
+
+    // Declencher une mise a jour apres chaque evenement chat ou changement modele
     const triggerRefresh = () => {
       requestStats();
     };
-
     socket.on('session-stats', handleStats);
     socket.on('chat-done', triggerRefresh);
     socket.on('chat-response', triggerRefresh);
+    socket.on('chat-reasoning', triggerRefresh);
     socket.on('chat-tool-call', triggerRefresh);
+    // Refresh immediat apres changement de modele (tache 8)
+    socket.on('model-changed', triggerRefresh);
 
     // Interroger toutes les 5s
     intervalRef.current = setInterval(requestStats, 5000);
@@ -61,9 +64,12 @@ export function useSessionStats(socket: Socket | null): SessionStats {
 
     return () => {
       socket.off('session-stats', handleStats);
+
       socket.off('chat-done', triggerRefresh);
       socket.off('chat-response', triggerRefresh);
+      socket.off('chat-reasoning', triggerRefresh);
       socket.off('chat-tool-call', triggerRefresh);
+      socket.off('model-changed', triggerRefresh);
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;

@@ -60,6 +60,10 @@ export class TrackManager {
     return path.join(this.getConductorDir(), 'tracks');
   }
 
+  static getArchiveDir(): string {
+    return path.join(this.getConductorDir(), 'archive');
+  }
+
   static getActiveFile(): string {
     return path.join(this.getConductorDir(), 'active-track.json');
   }
@@ -104,8 +108,18 @@ export class TrackManager {
     if (!fs.existsSync(tracksDir)) {
       this.init();
     }
-    const existing = fs.readdirSync(tracksDir).filter(d => fs.statSync(path.join(tracksDir, d)).isDirectory());
-    const nextNum  = String(existing.length + 1).padStart(3, '0');
+    // Count existing tracks in tracks/ and archive/ to determine next ID
+    const archiveDir = this.getArchiveDir();
+    const existingTracks: string[] = [];
+    if (fs.existsSync(tracksDir)) {
+      existingTracks.push(...fs.readdirSync(tracksDir)
+        .filter(d => fs.statSync(path.join(tracksDir, d)).isDirectory()));
+    }
+    if (fs.existsSync(archiveDir)) {
+      existingTracks.push(...fs.readdirSync(archiveDir)
+        .filter(d => fs.statSync(path.join(archiveDir, d)).isDirectory()));
+    }
+    const nextNum  = String(existingTracks.length + 1).padStart(3, '0');
     const slug     = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const id       = `${nextNum}-${slug}`;
     const dir      = path.join(tracksDir, id);
@@ -226,10 +240,19 @@ export class TrackManager {
   // ── List ────────────────────────────────────────────────────────────────
   static list(): string[] {
     const tracksDir = this.getTracksDir();
-    if (!fs.existsSync(tracksDir)) return [];
-    return fs.readdirSync(tracksDir)
-      .filter(d => fs.statSync(path.join(tracksDir, d)).isDirectory())
-      .sort();
+    const archiveDir = this.getArchiveDir();
+    const ids: string[] = [];
+    if (fs.existsSync(tracksDir)) {
+      const dirs = fs.readdirSync(tracksDir)
+        .filter(d => fs.statSync(path.join(tracksDir, d)).isDirectory());
+      ids.push(...dirs);
+    }
+    if (fs.existsSync(archiveDir)) {
+      const dirs = fs.readdirSync(archiveDir)
+        .filter(d => fs.statSync(path.join(archiveDir, d)).isDirectory());
+      ids.push(...dirs);
+    }
+    return ids.sort();
   }
 
   // ── Context for LLM ─────────────────────────────────────────────────────
@@ -251,8 +274,12 @@ export class TrackManager {
   // ── Track Meta ───────────────────────────────────────────────────────────
   static getTrackMeta(id: string): TrackMeta | null {
     const tracksDir = this.getTracksDir();
-    const trackDir = path.join(tracksDir, id);
-    if (!fs.existsSync(trackDir)) return null;
+    const archiveDir = this.getArchiveDir();
+    let trackDir = path.join(tracksDir, id);
+    if (!fs.existsSync(trackDir)) {
+      trackDir = path.join(archiveDir, id);
+      if (!fs.existsSync(trackDir)) return null;
+    }
     const metaPath = path.join(trackDir, 'metadata.json');
     if (!fs.existsSync(metaPath)) return null;
     try {
@@ -274,20 +301,24 @@ export class TrackManager {
   static getAllTracks(): TrackMeta[] {
     const ids = this.list();
     const active = this.getActive();
+    const tracksDir = this.getTracksDir();
+    const archiveDir = this.getArchiveDir();
     return ids.map(id => {
       const meta = this.getTrackMeta(id);
+      const inArchive = fs.existsSync(path.join(archiveDir, id));
       if (meta) {
         const isActive = active?.id === id;
-        return {
-          ...meta,
-          status: isActive ? 'active' : (meta.status as TrackMeta['status']),
-        };
+        let status: TrackMeta['status'] = isActive ? 'active' : (meta.status as TrackMeta['status']);
+        if (inArchive && !isActive) {
+          status = 'archived';
+        }
+        return { ...meta, status };
       }
       return {
         id,
         title: id,
         author: '',
-        status: active?.id === id ? 'active' : 'done',
+        status: active?.id === id ? 'active' : (inArchive ? 'archived' : 'done'),
         createdAt: '',
         updatedAt: '',
         validated: false,
@@ -295,12 +326,28 @@ export class TrackManager {
     });
   }
 
+  /** Resolve track directory: check tracks/ first, then archive/ */
+  static resolveTrackDir(id: string): string | null {
+    const tracksDir = this.getTracksDir();
+    const archiveDir = this.getArchiveDir();
+    const trackPath = path.join(tracksDir, id);
+    if (fs.existsSync(trackPath) && fs.statSync(trackPath).isDirectory()) {
+      return trackPath;
+    }
+    const archivePath = path.join(archiveDir, id);
+    if (fs.existsSync(archivePath) && fs.statSync(archivePath).isDirectory()) {
+      return archivePath;
+    }
+    return null;
+  }
+
   static computeProgress(trackId?: string): { done: number; total: number; percent: number; tasks: string[] } {
     const active = this.getActive();
     const id = trackId || (active ? active.id : null);
     if (!id) return { done: 0, total: 0, percent: 0, tasks: [] };
-    const tracksDir = this.getTracksDir();
-    const planPath = path.join(tracksDir, id, 'plan.md');
+    const trackDir = this.resolveTrackDir(id);
+    if (!trackDir) return { done: 0, total: 0, percent: 0, tasks: [] };
+    const planPath = path.join(trackDir, 'plan.md');
     if (!fs.existsSync(planPath)) return { done: 0, total: 0, percent: 0, tasks: [] };
     const content = fs.readFileSync(planPath, 'utf-8');
     const tasks = content.split('\n').filter(l => l.match(/^\s*- \[[ x~]\]/));
@@ -311,15 +358,15 @@ export class TrackManager {
   }
 
   static readSpec(trackId?: string): string {
-    const tracksDir = this.getTracksDir();
     let targetDir: string | null = null;
     if (trackId) {
-      targetDir = path.join(tracksDir, trackId);
+      targetDir = this.resolveTrackDir(trackId);
     } else {
       const active = this.getActive();
       if (!active) return '';
       targetDir = active.dir;
     }
+    if (!targetDir) return '';
     const specPath = path.join(targetDir, 'spec.md');
     if (!fs.existsSync(specPath)) return '';
     return fs.readFileSync(specPath, 'utf-8');
@@ -332,15 +379,15 @@ export class TrackManager {
   }
 
   static readLogs(trackId?: string, lines: number = 30): string {
-    const tracksDir = this.getTracksDir();
     let targetDir: string | null = null;
     if (trackId) {
-      targetDir = path.join(tracksDir, trackId);
+      targetDir = this.resolveTrackDir(trackId);
     } else {
       const active = this.getActive();
       if (!active) return '';
       targetDir = active.dir;
     }
+    if (!targetDir) return '';
     const logPath = path.join(targetDir, 'log.md');
     if (!fs.existsSync(logPath)) return '';
     const content = fs.readFileSync(logPath, 'utf-8');

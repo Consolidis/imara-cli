@@ -15,6 +15,9 @@ interface StatusBarProps {
   contextPercent?: number;
   contextState?: 'ok' | 'warning' | 'critical' | 'compacted';
   phase?: 'idle' | 'thinking' | 'tool';
+  // Git diff
+  onRequestGitDiff?: () => void;
+  gitDiffCount?: number;
 }
 
 const StatusBar: React.FC<StatusBarProps> = ({
@@ -31,6 +34,8 @@ const StatusBar: React.FC<StatusBarProps> = ({
   contextPercent,
   contextState,
   phase,
+  onRequestGitDiff,
+  gitDiffCount,
 }) => {
   const connColor = socketError ? '#ef4444' : connected ? '#22c55e' : '#f59e0b';
   const connText = socketError
@@ -119,6 +124,25 @@ const StatusBar: React.FC<StatusBarProps> = ({
         )}
       </div>
       <div className="right">
+        {/* Bouton Git Diff */}
+        {onRequestGitDiff && (
+          <button
+            onClick={onRequestGitDiff}
+            title="Voir les modifications Git"
+            style={{
+              background: 'none',
+              border: '1px solid var(--border-color)',
+              borderRadius: 3,
+              color: gitDiffCount && gitDiffCount > 0 ? '#f59e0b' : '#71717a',
+              cursor: 'pointer',
+              fontSize: 10,
+              padding: '1px 6px',
+              lineHeight: '16px',
+            }}
+          >
+            Git {gitDiffCount !== undefined && `(${gitDiffCount})`}
+          </button>
+        )}
         {projectPath && (
           <span
             title={projectPath}
