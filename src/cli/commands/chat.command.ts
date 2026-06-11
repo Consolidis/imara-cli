@@ -15,6 +15,8 @@ import { renderWelcome } from '../../ui/screens/welcome';
 import { ConfigManager } from '../../config/config-manager';
 import { isNativeModel } from '../../utils/model';
 import { Keychain } from '../../auth/keychain';
+import { startBrowserServer, stopBrowserServer, isBrowserServerRunning, getBrowserServerUrl } from '../../server/index';
+import { BrowserAgentBridge } from '../../server/browser-agent';
 
 interface ChatOptions {
   model?: string;
@@ -166,6 +168,8 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         console.log(`    ${chalk.hex(theme.secondary)('/files')}        : Lister les fichiers consultes`);
         console.log(`    ${chalk.hex(theme.secondary)('/tokens')}       : Afficher l\'utilisation et le cout`);
         console.log(`    ${chalk.hex(theme.secondary)('/model <id>')}   : Changer de modele (flash, standard, zuri)`);
+        console.log(`    ${chalk.hex(theme.secondary)('/browser')}      : Ouvrir l\'IDE Web (Monaco Editor + Chat)`);
+        console.log(`    ${chalk.hex(theme.secondary)('/browser stop')} : Arreter le serveur IDE Web`);
         console.log(`    ${chalk.hex(theme.secondary)('/save [name]')}   : Sauvegarder la session`);
         console.log(`    ${chalk.hex(theme.secondary)('/checkpoint')}     : Creer un checkpoint de session`);
         console.log(`    ${chalk.hex(theme.secondary)('/clear')}        : Effacer l\'historique`);
@@ -480,6 +484,61 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
       if (input === '/clear') {
         agent.clearHistory();
         console.log(chalk.hex(theme.warning)('\n  Historique effacé.\n'));
+        console.log(chalk.hex(theme.warning)('\n  Historique effacé.\n'));
+        rl.prompt();
+        return;
+      }
+
+      // --- COMMANDE /browser : Lance l'IDE Web ---
+      if (input === '/browser') {
+        rl.pause();
+        try {
+          if (isBrowserServerRunning()) {
+            const url = getBrowserServerUrl();
+            console.log(chalk.hex(theme.accent)(`\n  ✓ IDE Web déjà actif sur ${url}\n`));
+            try {
+              const open = (await import('open')).default;
+              await open(url!);
+            } catch {
+              console.log(chalk.hex(theme.muted)(`  Ouvrez ${url} dans votre navigateur.\n`));
+            }
+          } else {
+            console.log(chalk.hex(theme.primary)('\n  🚀 Démarrage de l\'IDE Web...\n'));
+            const serverInfo = await startBrowserServer(
+              BrowserAgentBridge.handleChatMessage.bind(BrowserAgentBridge)
+            );
+            console.log(chalk.hex(theme.accent)(`\n  ✓ IDE Web disponible sur ${serverInfo.url}\n`));
+            try {
+              const open = (await import('open')).default;
+              await open(serverInfo.url);
+              console.log(chalk.hex(theme.muted)('  Navigateur ouvert automatiquement.\n'));
+            } catch {
+              console.log(chalk.hex(theme.muted)(`  Ouvrez ${serverInfo.url} dans votre navigateur.\n`));
+            }
+          }
+        } catch (err: any) {
+          console.log(chalk.hex(theme.error)(`\n  ✗ Erreur: ${err.message}\n`));
+        }
+        rl.resume();
+        rl.prompt();
+        return;
+      }
+
+      // --- COMMANDE /browser stop : Arrête le serveur IDE Web ---
+      if (input === '/browser stop') {
+        rl.pause();
+        try {
+          if (isBrowserServerRunning()) {
+            BrowserAgentBridge.cleanup();
+            await stopBrowserServer();
+            console.log(chalk.hex(theme.accent)('\n  ✓ Serveur IDE Web arrêté.\n'));
+          } else {
+            console.log(chalk.hex(theme.muted)('\n  Aucun serveur IDE Web en cours d\'exécution.\n'));
+          }
+        } catch (err: any) {
+          console.log(chalk.hex(theme.error)(`\n  ✗ Erreur: ${err.message}\n`));
+        }
+        rl.resume();
         rl.prompt();
         return;
       }

@@ -3,3 +3,4 @@ dist/
 .env
 .env.local
 .imara/index-cache.json
+ui-dist/
