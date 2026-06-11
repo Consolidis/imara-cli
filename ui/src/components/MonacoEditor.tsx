@@ -165,6 +165,7 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
           theme="vs-dark"
           width="100%"
           height="100%"
+          loading={<div style={{ padding: 20, color: '#f59e0b' }}>Chargement de l'editeur...</div>}
           options={EDITOR_OPTIONS}
           onMount={handleEditorDidMount}
           onChange={handleChange}
