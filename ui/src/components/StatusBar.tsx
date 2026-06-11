@@ -84,7 +84,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
           </span>
         )}
         {/* Cout FCFA */}
-        {costFcfa !== undefined && costFcfa > 0 && (
+        {costFcfa !== undefined && (
           <span style={{ color: '#a1a1aa', fontSize: 11 }}>
             {costFcfa.toFixed(2)} FCFA
           </span>

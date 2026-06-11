@@ -8,7 +8,6 @@ import MonacoEditor from './components/MonacoEditor';
 import ChatPanel from './components/ChatPanel';
 import WelcomeScreen from './components/WelcomeScreen';
 import StatusBar from './components/StatusBar';
-import ResizeHandle from './components/ResizeHandle';
 import { FileContent, FileNode } from './types';
 
 interface Tab {
@@ -37,8 +36,6 @@ const App: React.FC = () => {
   const [openTabs, setOpenTabs] = useState<Tab[]>([]);
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
   const [projectPath, setProjectPath] = useState<string>('');
-  const [sidebarWidth, setSidebarWidth] = useState(260);
-  const [chatWidth, setChatWidth] = useState(340);
   const activeTab = openTabs.find(t => t.path === activeTabPath) || null;
   const fileContentCache = useRef<Map<string, string>>(new Map());
   const autoOpenedRef = useRef(false);
@@ -166,18 +163,12 @@ const App: React.FC = () => {
       </div>
 
       <div className="app-main">
-        <div className="file-explorer" style={{ width: sidebarWidth, flexShrink: 0 }}>
-          <FileExplorer
-            tree={tree}
-            onSelectFile={handleSelectFile}
-            selectedFile={activeTabPath}
-            loading={treeLoading}
-          />
-        </div>
-
-        <ResizeHandle side="left" onResize={(delta) => {
-          setSidebarWidth(prev => Math.max(150, Math.min(600, prev + delta)));
-        }} />
+        <FileExplorer
+          tree={tree}
+          onSelectFile={handleSelectFile}
+          selectedFile={activeTabPath}
+          loading={treeLoading}
+        />
 
         {activeTab ? (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -211,24 +202,18 @@ const App: React.FC = () => {
           <WelcomeScreen projectName={projectName} />
         )}
 
-        <ResizeHandle side="right" onResize={(delta) => {
-          setChatWidth(prev => Math.max(200, Math.min(800, prev - delta)));
-        }} />
-
-        <div className="chat-panel" style={{ width: chatWidth, flexShrink: 0 }}>
-          <ChatPanel
-            messages={messages}
-            onSendMessage={sendMessage}
-            isProcessing={isProcessing}
-            onClear={clearMessages}
-            onStop={stopGeneration}
-            currentModel={currentModel}
-            onChangeModel={(m: string) => {
-              setCurrentModel(m);
-              if (socket) socket.emit('change-model', { model: m });
-            }}
-          />
-        </div>
+        <ChatPanel
+          messages={messages}
+          onSendMessage={sendMessage}
+          isProcessing={isProcessing}
+          onClear={clearMessages}
+          onStop={stopGeneration}
+          currentModel={currentModel}
+          onChangeModel={(m: string) => {
+            setCurrentModel(m);
+            if (socket) socket.emit('change-model', { model: m });
+          }}
+        />
       </div>
 
       <StatusBar
