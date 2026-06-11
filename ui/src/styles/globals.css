@@ -461,3 +461,35 @@ body {
   font-size: 11px;
   color: var(--text-primary);
 }
+
+/* Poignees de redimensionnement */
+.resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+  position: relative;
+  z-index: 10;
+}
+.resize-handle:hover,
+.resize-handle:active {
+  background: var(--accent-primary);
+}
+.resize-handle-left {
+  margin-left: -2px;
+  margin-right: -2px;
+}
+.resize-handle-right {
+  margin-left: -2px;
+  margin-right: -2px;
+}
+
+/* Barre de statut - partie centrale */
+.status-bar .center {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  justify-content: center;
+}

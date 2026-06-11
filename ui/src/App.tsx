@@ -2,21 +2,21 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useSocket } from './hooks/useSocket';
 import { useFileTree } from './hooks/useFileTree';
 import { useChat } from './hooks/useChat';
+import { useSessionStats } from './hooks/useSessionStats';
 import FileExplorer from './components/FileExplorer';
 import MonacoEditor from './components/MonacoEditor';
 import ChatPanel from './components/ChatPanel';
 import WelcomeScreen from './components/WelcomeScreen';
 import StatusBar from './components/StatusBar';
+import ResizeHandle from './components/ResizeHandle';
 import { FileContent, FileNode } from './types';
 
-/** Structure d'un onglet ouvert */
 interface Tab {
   path: string;
   language: string;
   content: string | null;
 }
 
-/** Trouve le premier fichier dans l'arbre (parcours recursif) */
 function findFirstFile(nodes: FileNode[]): string | null {
   for (const node of nodes) {
     if (node.type === 'file') return node.path;
@@ -32,21 +32,22 @@ const App: React.FC = () => {
   const { socket, connected, error: socketError } = useSocket();
   const { tree, loading: treeLoading } = useFileTree(socket);
   const { messages, sendMessage, isProcessing, clearMessages, stopGeneration } = useChat(socket);
+  const sessionStats = useSessionStats(socket);
   const [currentModel, setCurrentModel] = useState<string>('zuri');
   const [openTabs, setOpenTabs] = useState<Tab[]>([]);
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
   const [projectPath, setProjectPath] = useState<string>('');
+  const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [chatWidth, setChatWidth] = useState(340);
   const activeTab = openTabs.find(t => t.path === activeTabPath) || null;
   const fileContentCache = useRef<Map<string, string>>(new Map());
   const autoOpenedRef = useRef(false);
 
-  // Ouvrir automatiquement le premier fichier au chargement initial de l'arbre
   useEffect(() => {
     if (treeLoading || tree.length === 0 || autoOpenedRef.current) return;
     autoOpenedRef.current = true;
     const firstPath = findFirstFile(tree);
     if (!firstPath) return;
-    console.log(`[AutoOpen] Premier fichier: "${firstPath}"`);
     const loadingTab: Tab = { path: firstPath, language: 'plaintext', content: null };
     setOpenTabs(prev => [...prev, loadingTab]);
     setActiveTabPath(firstPath);
@@ -66,99 +67,55 @@ const App: React.FC = () => {
             ? { ...t, content: result.content, language: result.language }
             : t)
         );
-        console.log(`[AutoOpen] Contenu charge: "${firstPath}" (${result.content.length} caracteres)`);
       });
     }
   }, [treeLoading, tree, socket]);
 
-  // Recuperer le chemin du projet via health check
   useEffect(() => {
     if (!socket) return;
     fetch('/api/health')
       .then((res) => res.json())
-      .then((data) => {
-        if (data.cwd) setProjectPath(data.cwd);
-      })
+      .then((data) => { if (data.cwd) setProjectPath(data.cwd); })
       .catch(() => {});
   }, [socket]);
 
-  // Ouvrir un fichier : charge le contenu via socket.emit (plus fiable que fetch)
-  // puis ajoute l'onglet
   const handleSelectFile = useCallback((path: string) => {
-    console.log(`[DEBUG handleSelectFile] Selection fichier: "${path}"`);
-    // Verifier si deja ouvert
     const alreadyOpen = openTabs.some(t => t.path === path);
-    if (alreadyOpen) {
-      console.log(`[DEBUG handleSelectFile] Fichier deja ouvert, activation onglet: "${path}"`);
-      setActiveTabPath(path);
-      return;
-    }
-    // Ajouter un onglet "loading" immediatement
+    if (alreadyOpen) { setActiveTabPath(path); return; }
     const loadingTab: Tab = { path, language: 'plaintext', content: null };
     setOpenTabs(prev => [...prev, loadingTab]);
     setActiveTabPath(path);
-    // Charger le contenu via socket.emit (callback integre, plus fiable que fetch)
     if (!socket) {
-      console.warn(`[DEBUG handleSelectFile] Socket non connecte, fallback fetch pour: "${path}"`);
       fetch(`/api/files/read?path=${encodeURIComponent(path)}`)
         .then(res => res.json())
         .then((result: FileContent & { error?: string }) => {
           if (result.error) {
-            setOpenTabs(prev =>
-              prev.map(t => t.path === path
-                ? { ...t, content: `// Erreur: ${result.error}` }
-                : t)
-            );
+            setOpenTabs(prev => prev.map(t => t.path === path ? { ...t, content: `// Erreur: ${result.error}` } : t));
             return;
           }
           fileContentCache.current.set(path, result.content);
-          setOpenTabs(prev =>
-            prev.map(t => t.path === path
-              ? { ...t, content: result.content, language: result.language }
-              : t)
-          );
+          setOpenTabs(prev => prev.map(t => t.path === path ? { ...t, content: result.content, language: result.language } : t));
         })
-        .catch(err => {
-          setOpenTabs(prev =>
-            prev.map(t => t.path === path
-              ? { ...t, content: `// Erreur reseau: ${err.message}` }
-              : t)
-          );
-        });
+        .catch(err => { setOpenTabs(prev => prev.map(t => t.path === path ? { ...t, content: `// Erreur: ${err.message}` } : t)); });
       return;
     }
-    console.log(`[DEBUG handleSelectFile] Emission socket read-file pour: "${path}"`);
     socket.emit('read-file', { path }, (result: FileContent & { error?: string }) => {
-      console.log(`[DEBUG handleSelectFile] Reponse socket pour "${path}":`, result);
       if (result.error) {
-        console.warn(`[DEBUG handleSelectFile] Erreur socket pour "${path}": ${result.error}`);
-        setOpenTabs(prev =>
-          prev.map(t => t.path === path
-            ? { ...t, content: `// Erreur: ${result.error}` }
-            : t)
-        );
+        setOpenTabs(prev => prev.map(t => t.path === path ? { ...t, content: `// Erreur: ${result.error}` } : t));
         return;
       }
       fileContentCache.current.set(path, result.content);
-      setOpenTabs(prev =>
-        prev.map(t => t.path === path
-          ? { ...t, content: result.content, language: result.language }
-          : t)
-      );
-      console.log(`[DEBUG handleSelectFile] Onglet mis a jour avec succes: "${path}" (${result.content.length} caracteres)`);
+      setOpenTabs(prev => prev.map(t => t.path === path ? { ...t, content: result.content, language: result.language } : t));
     });
   }, [openTabs, socket]);
 
-  // Fermer un onglet
   const handleCloseTab = useCallback((path: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setOpenTabs(prev => {
       const idx = prev.findIndex(t => t.path === path);
       const updated = prev.filter(t => t.path !== path);
-      // Si on ferme l'onglet actif, basculer sur un voisin
       if (path === activeTabPath && updated.length > 0) {
-        const newIdx = Math.min(idx, updated.length - 1);
-        setActiveTabPath(updated[newIdx].path);
+        setActiveTabPath(updated[Math.min(idx, updated.length - 1)].path);
       } else if (updated.length === 0) {
         setActiveTabPath(null);
       }
@@ -166,36 +123,24 @@ const App: React.FC = () => {
     });
   }, [activeTabPath]);
 
-  // Mettre a jour le contenu d'un onglet (apres sauvegarde)
   const handleContentChange = useCallback((path: string, content: string) => {
-    setOpenTabs(prev =>
-      prev.map(t => (t.path === path ? { ...t, content } : t))
-    );
+    setOpenTabs(prev => prev.map(t => (t.path === path ? { ...t, content } : t)));
     fileContentCache.current.set(path, content);
   }, []);
 
-  // Rafraichir le contenu si l'agent modifie le fichier (file-updated)
   useEffect(() => {
     if (!socket) return;
     const handleFileUpdated = (data: { path: string; event: string }) => {
-      // Verifier si le fichier modifie est dans les onglets ouverts
-      const tab = openTabs.find(t =>
-        t.path === data.path || t.path.endsWith(data.path)
-      );
+      const tab = openTabs.find(t => t.path === data.path || t.path.endsWith(data.path));
       if (!tab) return;
-      // Recharger le contenu
       socket.emit('read-file', { path: tab.path }, (result: FileContent & { error?: string }) => {
         if (!result.error) {
-          setOpenTabs(prev =>
-            prev.map(t => (t.path === tab.path ? { ...t, content: result.content, language: result.language } : t))
-          );
+          setOpenTabs(prev => prev.map(t => (t.path === tab.path ? { ...t, content: result.content, language: result.language } : t)));
         }
       });
     };
     socket.on('file-updated', handleFileUpdated);
-    return () => {
-      socket.off('file-updated', handleFileUpdated);
-    };
+    return () => { socket.off('file-updated', handleFileUpdated); };
   }, [socket, openTabs]);
 
   const projectName = projectPath
@@ -204,7 +149,6 @@ const App: React.FC = () => {
 
   return (
     <div className="app-layout">
-      {/* Header */}
       <div className="app-header">
         <div className="brand">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 20, height: 20 }}>
@@ -212,9 +156,7 @@ const App: React.FC = () => {
           </svg>
           IMARA STUDIO CODE
           {projectName && (
-            <span style={{ fontWeight: 400, fontSize: 11, color: '#71717a', marginLeft: 8 }}>
-              — {projectName}
-            </span>
+            <span style={{ fontWeight: 400, fontSize: 11, color: '#71717a', marginLeft: 8 }}>— {projectName}</span>
           )}
         </div>
         <div className="status-indicator">
@@ -222,19 +164,23 @@ const App: React.FC = () => {
           {connected ? 'Connecte' : 'Connexion...'}
         </div>
       </div>
-      {/* Main content */}
+
       <div className="app-main">
-        {/* File Explorer */}
-        <FileExplorer
-          tree={tree}
-          onSelectFile={handleSelectFile}
-          selectedFile={activeTabPath}
-          loading={treeLoading}
-        />
-        {/* Editor + Tabs */}
+        <div className="file-explorer" style={{ width: sidebarWidth, flexShrink: 0 }}>
+          <FileExplorer
+            tree={tree}
+            onSelectFile={handleSelectFile}
+            selectedFile={activeTabPath}
+            loading={treeLoading}
+          />
+        </div>
+
+        <ResizeHandle side="left" onResize={(delta) => {
+          setSidebarWidth(prev => Math.max(150, Math.min(600, prev + delta)));
+        }} />
+
         {activeTab ? (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            {/* Barre d'onglets */}
             <div className="editor-tabs">
               {openTabs.map((tab) => (
                 <button
@@ -244,24 +190,12 @@ const App: React.FC = () => {
                   style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                 >
                   {tab.path.split('/').pop()}
-                  <span
-                    onClick={(e) => handleCloseTab(tab.path, e)}
-                    style={{
-                      fontSize: 10,
-                      color: '#71717a',
-                      cursor: 'pointer',
-                      padding: '0 2px',
-                      borderRadius: 2,
-                      lineHeight: '14px',
-                    }}
-                    title="Fermer l'onglet"
-                  >
-                    X
-                  </span>
+                  <span onClick={(e) => handleCloseTab(tab.path, e)}
+                    style={{ fontSize: 10, color: '#71717a', cursor: 'pointer', padding: '0 2px', borderRadius: 2, lineHeight: '14px' }}
+                    title="Fermer l'onglet">X</span>
                 </button>
               ))}
             </div>
-            {/* Editeur */}
             <div style={{ flex: 1, overflow: 'hidden' }}>
               <MonacoEditor
                 key={activeTab.path}
@@ -276,32 +210,41 @@ const App: React.FC = () => {
         ) : (
           <WelcomeScreen projectName={projectName} />
         )}
-        {/* Chat Panel */}
-        <ChatPanel
-          messages={messages}
-          onSendMessage={sendMessage}
-          isProcessing={isProcessing}
-          onClear={clearMessages}
-          onStop={stopGeneration}
-          currentModel={currentModel}
-          onChangeModel={(m: string) => {
-            console.log(`[DEBUG change-model] Changement de modele: "${m}"`);
-            setCurrentModel(m);
-            if (socket) {
-              socket.emit('change-model', { model: m });
-            } else {
-              console.warn(`[DEBUG change-model] Socket non connecte, modele "${m}" non transmis au serveur`);
-            }
-          }}
-        />
+
+        <ResizeHandle side="right" onResize={(delta) => {
+          setChatWidth(prev => Math.max(200, Math.min(800, prev - delta)));
+        }} />
+
+        <div className="chat-panel" style={{ width: chatWidth, flexShrink: 0 }}>
+          <ChatPanel
+            messages={messages}
+            onSendMessage={sendMessage}
+            isProcessing={isProcessing}
+            onClear={clearMessages}
+            onStop={stopGeneration}
+            currentModel={currentModel}
+            onChangeModel={(m: string) => {
+              setCurrentModel(m);
+              if (socket) socket.emit('change-model', { model: m });
+            }}
+          />
+        </div>
       </div>
-      {/* Status Bar */}
+
       <StatusBar
         currentFile={activeTabPath}
         fileLanguage={activeTab?.language}
         connected={connected}
         socketError={socketError}
         projectPath={projectPath}
+        model={sessionStats.model}
+        tokens={sessionStats.tokens}
+        costFcfa={sessionStats.costFcfa}
+        trackId={sessionStats.trackId}
+        trackTitle={sessionStats.trackTitle}
+        contextPercent={sessionStats.contextPercent}
+        contextState={sessionStats.contextState}
+        phase={sessionStats.phase}
       />
     </div>
   );

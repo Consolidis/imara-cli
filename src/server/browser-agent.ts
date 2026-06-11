@@ -234,6 +234,47 @@ export class BrowserAgentBridge {
     }
   }
 
+  /** Retourne les stats de session pour un socket (ou valeurs par defaut) */
+  static getStatsForSocket(socketId: string): {
+    model: string;
+    tokens: number;
+    costFcfa: number;
+    trackId: string | null;
+    trackTitle: string | null;
+    contextPercent: number;
+    contextState: 'ok' | 'warning' | 'critical' | 'compacted';
+    phase: 'idle' | 'thinking' | 'tool';
+  } {
+    // Chercher une session associee a ce socket
+    for (const [, session] of activeSessions) {
+      if (session.socket.id === socketId) {
+        const stats = session.agent.getSessionStats();
+        const ctxStats = session.agent.getContextStats();
+        return {
+          model: session.agent.getModel(),
+          tokens: stats.tokens,
+          costFcfa: stats.cost,
+          trackId: null,
+          trackTitle: null,
+          contextPercent: ctxStats.percent,
+          contextState: ctxStats.state,
+          phase: 'idle',
+        };
+      }
+    }
+    // Pas de session active -> defaut
+    return {
+      model: 'zuri',
+      tokens: 0,
+      costFcfa: 0,
+      trackId: null,
+      trackTitle: null,
+      contextPercent: 0,
+      contextState: 'ok',
+      phase: 'idle',
+    };
+  }
+
   static cancelGeneration(sessionId: string): void {
     const session = activeSessions.get(sessionId);
     if (session) {

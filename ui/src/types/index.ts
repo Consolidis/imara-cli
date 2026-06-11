@@ -41,3 +41,15 @@ export interface FileSaveResult {
   saved: boolean;
   timestamp: number;
 }
+
+/** Statistiques de session (pour la barre de statut) */
+export interface SessionStats {
+  model: string;
+  tokens: number;
+  costFcfa: number;
+  trackId: string | null;
+  trackTitle: string | null;
+  contextPercent: number;
+  contextState: 'ok' | 'warning' | 'critical' | 'compacted';
+  phase: 'idle' | 'thinking' | 'tool';
+}

@@ -2,11 +2,11 @@ import { Server as SocketServer, Socket } from 'socket.io';
 import * as fs from 'fs';
 import * as path from 'path';
 import { validatePath, isFileTransferAllowed, isTextExtension } from './path-guard';
+import { TrackManager } from '../context/conductor/track-manager';
 import { Message, ParsedToolCall, ToolArguments } from '../agent/agent.types';
 
 // Types des événements Socket.io
-
-/** Nœud de l'arborescence du projet */
+/** Noeud de l'arborescence du projet */
 export interface FileNode {
   name: string;
   path: string;
@@ -16,7 +16,7 @@ export interface FileNode {
   children?: FileNode[];
 }
 
-/** Message affiché dans le chat UI */
+/** Message affiche dans le chat UI */
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'tool' | 'system';
@@ -27,24 +27,23 @@ export interface ChatMessage {
 }
 
 // ---------------------------------------------------------------------------
-// Gestionnaire d'événements Socket.io
+// Gestionnaire d'evenements Socket.io
 // ---------------------------------------------------------------------------
 
 /**
- * Configure tous les gestionnaires d'événements Socket.io.
+ * Configure tous les gestionnaires d'evenements Socket.io.
  *
  * @param io - Instance du serveur Socket.io
- * @param onChatMessage - Callback pour traiter un message chat (relié à l'agent)
+ * @param onChatMessage - Callback pour traiter un message chat (relie a l'agent)
  */
 export function setupSocketHandlers(
   io: SocketServer,
   onChatMessage: (socket: Socket, message: string, sessionId: string) => Promise<void>
 ): void {
-
   io.on('connection', (socket: Socket) => {
-    console.log(`[Browser IDE] Client connecté: ${socket.id}`);
+    console.log(`[Browser IDE] Client connecte: ${socket.id}`);
 
-    // --- LIST DIRECTORY : Renvoie l'arborescence du projet ---    // --- LIST DIRECTORY : Renvoie l'arborescence du projet ---
+    // --- LIST DIRECTORY : Renvoie l'arborescence du projet ---
     socket.on('list-directory', async (_data: unknown, callback?: (nodes: FileNode[]) => void) => {
       try {
         const rootPath = process.cwd();
@@ -58,7 +57,6 @@ export function setupSocketHandlers(
         }
       } catch (err: any) {
         console.error(`[Browser IDE] Erreur construction arborescence: ${err.message}`);
-        // Envoyer un tableau vide via le callback pour ne pas bloquer le client
         if (typeof callback === 'function') {
           callback([]);
         } else {
@@ -67,7 +65,7 @@ export function setupSocketHandlers(
       }
     });
 
-    // --- READ FILE : Lit un fichier sur le disque ---    // --- READ FILE : Lit un fichier sur le disque ---
+    // --- READ FILE : Lit un fichier sur le disque ---
     socket.on('read-file', async (data: { path: string }, callback?: (result: any) => void) => {
       try {
         const safePath = validatePath(data.path);
@@ -80,7 +78,6 @@ export function setupSocketHandlers(
           }
           return;
         }
-
         const content = fs.readFileSync(safePath, 'utf-8');
         const stat = fs.statSync(safePath);
         const result = {
@@ -90,7 +87,6 @@ export function setupSocketHandlers(
           size: stat.size,
           lastModified: stat.mtime.toISOString(),
         };
-
         if (typeof callback === 'function') {
           callback(result);
         } else {
@@ -106,13 +102,12 @@ export function setupSocketHandlers(
       }
     });
 
-    // --- WRITE FILE : Écrit les modifications sur le disque ---
+    // --- WRITE FILE : Ecrit les modifications sur le disque ---
     socket.on('write-file', async (data: { path: string; content: string }, callback?: (result: any) => void) => {
       try {
         const safePath = validatePath(data.path);
         fs.writeFileSync(safePath, data.content, 'utf-8');
-        console.log(`[Browser IDE] Fichier sauvegardé: ${path.relative(process.cwd(), safePath)}`);
-
+        console.log(`[Browser IDE] Fichier sauvegarde: ${path.relative(process.cwd(), safePath)}`);
         const result = { path: data.path, saved: true, timestamp: Date.now() };
         if (typeof callback === 'function') {
           callback(result);
@@ -129,7 +124,19 @@ export function setupSocketHandlers(
       }
     });
 
-    // --- CHAT MESSAGE : Transmet le message à l'agent ---    // --- CHANGE MODEL : Recoit le changement de modele depuis l'UI ---
+    // --- REQUEST STATS : Renvoie les stats de session au client ---
+    socket.on('request-stats', () => {
+      const { BrowserAgentBridge } = require('./browser-agent');
+      const stats = BrowserAgentBridge.getStatsForSocket(socket.id);
+      const track = TrackManager.getActive();
+      if (track) {
+        stats.trackId = track.id;
+        stats.trackTitle = track.title;
+      }
+      socket.emit('session-stats', stats);
+    });
+
+    // --- CHANGE MODEL : Recoit le changement de modele depuis l'UI ---
     socket.on('change-model', (data: { model: string }) => {
       console.log(`[Socket/change-model] Client ${socket.id} change de modele: "${data.model}"`);
       const { BrowserAgentBridge } = require('./browser-agent');
@@ -137,7 +144,7 @@ export function setupSocketHandlers(
       socket.emit('model-changed', { model: data.model, timestamp: Date.now() });
     });
 
-    // --- CHAT MESSAGE : Transmet le message à l'agent ---
+    // --- CHAT MESSAGE : Transmet le message a l'agent ---
     socket.on('chat-message', async (data: { message: string; sessionId?: string }) => {
       const sessionId = data.sessionId || `session_${socket.id}`;
       try {
@@ -151,15 +158,15 @@ export function setupSocketHandlers(
       }
     });
 
-    // --- STOP GENERATION : Interrompt l'agent ---    // --- STOP GENERATION : Interrompt l'agent ---    // --- STOP GENERATION : Interrompt l'agent ---
+    // --- STOP GENERATION : Interrompt l'agent ---
     socket.on('stop-generation', (_data: unknown) => {
-      console.log(`[Browser IDE] Arrêt demandé par le client: ${socket.id}`);
+      console.log(`[Browser IDE] Arret demande par le client: ${socket.id}`);
       socket.emit('generation-stopped', { timestamp: Date.now() });
     });
 
-    // --- DÉCONNEXION ---
+    // --- DECONNEXION ---
     socket.on('disconnect', (reason: string) => {
-      console.log(`[Browser IDE] Client déconnecté: ${socket.id} (raison: ${reason})`);
+      console.log(`[Browser IDE] Client deconnecte: ${socket.id} (raison: ${reason})`);
     });
   });
 }
@@ -169,7 +176,7 @@ export function setupSocketHandlers(
 // ---------------------------------------------------------------------------
 
 /**
- * Construit récursivement l'arborescence des fichiers du projet,
+ * Construit recursivement l'arborescence des fichiers du projet,
  * en excluant les dossiers sensibles (node_modules, .git, dist, etc.).
  */
 async function buildFileTree(
@@ -182,19 +189,16 @@ async function buildFileTree(
     '.cache', '__pycache__', '.venv', 'venv', '.idea', '.vscode',
   ]);
   const EXCLUDED_FILES = new Set(['package-lock.json', 'yarn.lock', '.DS_Store']);
-
-  if (depth > 5) return []; // Limiter la profondeur à 5 niveaux
+  if (depth > 5) return [];
 
   const entries: FileNode[] = [];
   let names: string[];
-
   try {
     names = fs.readdirSync(dirPath);
   } catch {
     return entries;
   }
 
-  // Trier : dossiers d'abord, puis fichiers, par ordre alphabétique
   const sortedNames = names.sort((a, b) => {
     const aIsDir = fs.statSync(path.join(dirPath, a)).isDirectory();
     const bIsDir = fs.statSync(path.join(dirPath, b)).isDirectory();
@@ -206,10 +210,9 @@ async function buildFileTree(
   for (const name of sortedNames) {
     const fullPath = path.join(dirPath, name);
     const relativePath = path.relative(rootPath, fullPath).replace(/\\/g, '/');
-
     if (EXCLUDED_DIRS.has(name) || EXCLUDED_FILES.has(name)) continue;
-    if (name.startsWith('.')) continue; // Cacher les fichiers cachés
-    if (name === 'ui') continue; // Le dossier UI a son propre build
+    if (name.startsWith('.')) continue;
+    if (name === 'ui') continue;
 
     let stat: fs.Stats;
     try {
@@ -236,57 +239,26 @@ async function buildFileTree(
       });
     }
   }
-
   return entries;
 }
 
-/**
- * Détecte le langage d'un fichier à partir de son extension pour Monaco Editor.
- */
+/** Detecte le langage d'un fichier a partir de son extension pour Monaco Editor. */
 function detectLanguage(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
   const langMap: Record<string, string> = {
-    '.ts': 'typescript',
-    '.tsx': 'typescript',
-    '.js': 'javascript',
-    '.jsx': 'javascript',
-    '.json': 'json',
-    '.md': 'markdown',
-    '.css': 'css',
-    '.scss': 'scss',
-    '.less': 'less',
-    '.html': 'html',
-    '.htm': 'html',
-    '.xml': 'xml',
-    '.yaml': 'yaml',
-    '.yml': 'yaml',
-    '.toml': 'toml',
-    '.env': 'plaintext',
-    '.txt': 'plaintext',
-    '.py': 'python',
-    '.rb': 'ruby',
-    '.go': 'go',
-    '.rs': 'rust',
-    '.java': 'java',
-    '.c': 'c',
-    '.cpp': 'cpp',
-    '.h': 'c',
-    '.hpp': 'cpp',
-    '.php': 'php',
-    '.vue': 'html',
-    '.svelte': 'html',
-    '.sql': 'sql',
-    '.graphql': 'graphql',
-    '.sh': 'shell',
-    '.bat': 'bat',
-    '.ps1': 'powershell',
-    '.svg': 'xml',
-    '.gitignore': 'plaintext',
-    '.dockerignore': 'plaintext',
-    '.editorconfig': 'ini',
-    '.config': 'json',
-    '.rc': 'json',
-    '.astro': 'html',
+    '.ts': 'typescript', '.tsx': 'typescript', '.js': 'javascript',
+    '.jsx': 'javascript', '.json': 'json', '.md': 'markdown',
+    '.css': 'css', '.scss': 'scss', '.less': 'less',
+    '.html': 'html', '.htm': 'html', '.xml': 'xml',
+    '.yaml': 'yaml', '.yml': 'yaml', '.toml': 'toml',
+    '.env': 'plaintext', '.txt': 'plaintext',
+    '.py': 'python', '.rb': 'ruby', '.go': 'go', '.rs': 'rust',
+    '.java': 'java', '.c': 'c', '.cpp': 'cpp', '.h': 'c', '.hpp': 'cpp',
+    '.php': 'php', '.vue': 'html', '.svelte': 'html',
+    '.sql': 'sql', '.graphql': 'graphql',
+    '.sh': 'shell', '.bat': 'bat', '.ps1': 'powershell',
+    '.svg': 'xml', '.gitignore': 'plaintext', '.dockerignore': 'plaintext',
+    '.editorconfig': 'ini', '.config': 'json', '.rc': 'json', '.astro': 'html',
   };
   return langMap[ext] || 'plaintext';
 }
