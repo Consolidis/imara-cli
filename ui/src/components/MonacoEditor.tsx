@@ -26,14 +26,11 @@ const EDITOR_OPTIONS = {
   automaticLayout: true,
   bracketPairColorization: { enabled: true },
   wordWrap: 'on' as const,
-  // Désactiver TOUS les diagnostics et erreurs visuelles
   renderValidationDecorations: 'off' as const,
   hover: { enabled: false, delay: 300 },
   overviewRulerLanes: 0,
   overviewRulerBorder: false,
   hideCursorInOverviewRuler: true,
-  // Désactiver les squiggles et marqueurs d'erreur
-  // Options supplémentaires pour éliminer les artefacts visuels
   occurrencesHighlight: 'off' as const,
   selectionHighlight: false,
   matchBrackets: 'never' as const,
@@ -63,13 +60,17 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
 
   // Mettre à jour le contenu quand le fichier change ou que le contenu arrive
   useEffect(() => {
+    // Nouveau fichier selectionne
     if (filePath !== prevFilePathRef.current) {
-      // Changement de fichier : reset complet
+      console.log(`[MonacoEditor] Changement fichier: "${prevFilePathRef.current}" -> "${filePath}", content=`, fileContent);
       setContent(fileContent);
       setSyncState('saved');
       prevFilePathRef.current = filePath;
-    } else if (fileContent !== null && content === null) {
-      // Meme fichier, contenu qui arrive apres chargement async
+      return;
+    }
+    // Meme fichier, nouveau contenu (reception asynchrone ou file-updated)
+    if (fileContent !== null && fileContent !== content) {
+      console.log(`[MonacoEditor] Mise a jour contenu pour "${filePath}": ${fileContent.length} caracteres`);
       setContent(fileContent);
       setSyncState('saved');
     }
@@ -79,13 +80,10 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
   const debouncedSave = useCallback(
     (newContent: string) => {
       if (!filePath || !socket) return;
-
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
       }
-
       setSyncState('modified');
-
       debounceRef.current = setTimeout(() => {
         setSyncState('saving');
         socket.emit(
@@ -105,7 +103,7 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
     [filePath, socket, onContentChange]
   );
 
-  // Nettoyer les markers de validation en temps réel
+  // Nettoyer les markers de validation en temps reel
   const clearMarkers = useCallback(() => {
     if (!monacoRef.current || !editorRef.current) return;
     const model = editorRef.current.getModel();
@@ -118,17 +116,10 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
-
-    // Désactiver les marqueurs immédiatement
     clearMarkers();
-
-    // Nettoyer les marqueurs à chaque changement de contenu
     editor.onDidChangeModelContent(() => {
-      // Petit timeout pour laisser Monaco finir sa validation
       setTimeout(clearMarkers, 0);
     });
-
-    // Nettoyer les marqueurs périodiquement (sécurité)
     markerCleanerRef.current = setInterval(clearMarkers, 2000);
   };
 
@@ -174,10 +165,10 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
           />
           {filePath.split('/').pop()}
           {syncState === 'modified' && (
-            <span style={{ color: '#f59e0b', fontSize: 10, marginLeft: 4 }}>● modifié</span>
+            <span style={{ color: '#f59e0b', fontSize: 10, marginLeft: 4 }}>● modifie</span>
           )}
           {syncState === 'saving' && (
-            <span style={{ color: '#f59e0b', fontSize: 10, marginLeft: 4 }}>⏺ sauvegarde...</span>
+            <span style={{ color: '#f59e0b', fontSize: 10, marginLeft: 4 }}>sauvegarde...</span>
           )}
         </button>
       </div>
