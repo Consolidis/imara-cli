@@ -10,7 +10,6 @@ interface MonacoEditorProps {
   onContentChange: (path: string, content: string) => void;
 }
 
-/** Configuration de l'éditeur Monaco — diagnostics désactivés */
 const EDITOR_OPTIONS = {
   minimap: { enabled: false },
   scrollBeyondLastLine: false,
@@ -50,31 +49,40 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
   socket,
   onContentChange,
 }) => {
-  const [content, setContent] = useState<string | null>(fileContent);
   const [syncState, setSyncState] = useState<'saved' | 'modified' | 'saving'>('saved');
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const localContentRef = useRef<string>('');
   const prevFilePathRef = useRef<string | null>(null);
   const markerCleanerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Mettre à jour le contenu quand le fichier change ou que le contenu arrive
+  // Mettre a jour le contenu de l'editeur quand fileContent change
   useEffect(() => {
-    // Nouveau fichier selectionne
+    const editor = editorRef.current;
+    if (!editor || fileContent === null) return;
+
+    // Si le fichier a change, on remplace tout le modele
     if (filePath !== prevFilePathRef.current) {
-      console.log(`[MonacoEditor] Changement fichier: "${prevFilePathRef.current}" -> "${filePath}", content=`, fileContent);
-      setContent(fileContent);
-      setSyncState('saved');
+      console.log(`[MonacoEditor] Changement fichier: "${prevFilePathRef.current}" -> "${filePath}"`);
       prevFilePathRef.current = filePath;
+      localContentRef.current = fileContent;
+      editor.setValue(fileContent);
+      setSyncState('saved');
       return;
     }
-    // Meme fichier, nouveau contenu (reception asynchrone ou file-updated)
-    if (fileContent !== null && fileContent !== content) {
-      console.log(`[MonacoEditor] Mise a jour contenu pour "${filePath}": ${fileContent.length} caracteres`);
-      setContent(fileContent);
+
+    // Meme fichier, mise a jour du contenu (rechargement asynchrone)
+    if (fileContent !== localContentRef.current) {
+      console.log(`[MonacoEditor] Mise a jour contenu "${filePath}": ${fileContent.length} caracteres`);
+      localContentRef.current = fileContent;
+      editor.setValue(fileContent);
+      // Forcer le modele a ne pas etre considere comme modifie
+      const model = editor.getModel();
+      if (model) model.pushStackElement();
       setSyncState('saved');
     }
-  }, [filePath, fileContent, content]);
+  }, [filePath, fileContent]);
 
   // Sauvegarder automatiquement avec debounce
   const debouncedSave = useCallback(
@@ -103,7 +111,7 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
     [filePath, socket, onContentChange]
   );
 
-  // Nettoyer les markers de validation en temps reel
+  // Nettoyer les markers de validation
   const clearMarkers = useCallback(() => {
     if (!monacoRef.current || !editorRef.current) return;
     const model = editorRef.current.getModel();
@@ -116,6 +124,13 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
+
+    // Charger le contenu initial si disponible
+    if (fileContent !== null) {
+      localContentRef.current = fileContent;
+      editor.setValue(fileContent);
+    }
+
     clearMarkers();
     editor.onDidChangeModelContent(() => {
       setTimeout(clearMarkers, 0);
@@ -125,26 +140,19 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
 
   const handleChange: OnChange = (value) => {
     if (value !== undefined) {
-      setContent(value);
+      localContentRef.current = value;
       debouncedSave(value);
     }
   };
 
-  // Nettoyer les timers
   useEffect(() => {
     return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-      if (markerCleanerRef.current) {
-        clearInterval(markerCleanerRef.current);
-      }
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (markerCleanerRef.current) clearInterval(markerCleanerRef.current);
     };
   }, []);
 
-  if (!filePath) {
-    return null;
-  }
+  if (!filePath) return null;
 
   return (
     <div className="editor-panel">
@@ -165,7 +173,7 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
           />
           {filePath.split('/').pop()}
           {syncState === 'modified' && (
-            <span style={{ color: '#f59e0b', fontSize: 10, marginLeft: 4 }}>● modifie</span>
+            <span style={{ color: '#f59e0b', fontSize: 10, marginLeft: 4 }}>modifie</span>
           )}
           {syncState === 'saving' && (
             <span style={{ color: '#f59e0b', fontSize: 10, marginLeft: 4 }}>sauvegarde...</span>
@@ -177,7 +185,7 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
           key={filePath}
           defaultLanguage={fileLanguage || 'plaintext'}
           language={fileLanguage || 'plaintext'}
-          value={content || ''}
+          defaultValue=""
           theme="vs-dark"
           options={EDITOR_OPTIONS}
           onMount={handleEditorDidMount}
