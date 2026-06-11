@@ -38,7 +38,7 @@ const App: React.FC = () => {
       .catch(() => {});
   }, [socket]);
 
-  // Ouvrir un fichier : charge le contenu via HTTP puis ajoute l'onglet  // Ouvrir un fichier : charge le contenu via socket.emit (plus fiable que fetch)
+  // Ouvrir un fichier : charge le contenu via socket.emit (plus fiable que fetch)
   // puis ajoute l'onglet
   const handleSelectFile = useCallback((path: string) => {
     console.log(`[DEBUG handleSelectFile] Selection fichier: "${path}"`);
@@ -103,16 +103,14 @@ const App: React.FC = () => {
       );
       console.log(`[DEBUG handleSelectFile] Onglet mis a jour avec succes: "${path}" (${result.content.length} caracteres)`);
     });
-  }, [openTabs, socket]);  }, [openTabs]);
+  }, [openTabs, socket]);
 
   // Fermer un onglet
   const handleCloseTab = useCallback((path: string, e: React.MouseEvent) => {
     e.stopPropagation();
-
     setOpenTabs(prev => {
       const idx = prev.findIndex(t => t.path === path);
       const updated = prev.filter(t => t.path !== path);
-
       // Si on ferme l'onglet actif, basculer sur un voisin
       if (path === activeTabPath && updated.length > 0) {
         const newIdx = Math.min(idx, updated.length - 1);
@@ -120,12 +118,11 @@ const App: React.FC = () => {
       } else if (updated.length === 0) {
         setActiveTabPath(null);
       }
-
       return updated;
     });
   }, [activeTabPath]);
 
-  // Mettre à jour le contenu d'un onglet (après sauvegarde)  // Mettre à jour le contenu d'un onglet (après sauvegarde)
+  // Mettre à jour le contenu d'un onglet (après sauvegarde)
   const handleContentChange = useCallback((path: string, content: string) => {
     setOpenTabs(prev =>
       prev.map(t => (t.path === path ? { ...t, content } : t))
@@ -133,17 +130,15 @@ const App: React.FC = () => {
     fileContentCache.current.set(path, content);
   }, []);
 
-  // Rafraîchir le contenu si l'agent modifie le fichier (file-updated)  // Rafraîchir le contenu si l'agent modifie le fichier (file-updated)
+  // Rafraîchir le contenu si l'agent modifie le fichier (file-updated)
   useEffect(() => {
     if (!socket) return;
-
     const handleFileUpdated = (data: { path: string; event: string }) => {
       // Vérifier si le fichier modifié est dans les onglets ouverts
       const tab = openTabs.find(t =>
         t.path === data.path || t.path.endsWith(data.path)
       );
       if (!tab) return;
-
       // Recharger le contenu
       socket.emit('read-file', { path: tab.path }, (result: FileContent & { error?: string }) => {
         if (!result.error) {
@@ -153,7 +148,6 @@ const App: React.FC = () => {
         }
       });
     };
-
     socket.on('file-updated', handleFileUpdated);
     return () => {
       socket.off('file-updated', handleFileUpdated);
@@ -184,7 +178,6 @@ const App: React.FC = () => {
           {connected ? 'Connecté' : 'Connexion...'}
         </div>
       </div>
-
       {/* Main content */}
       <div className="app-main">
         {/* File Explorer */}
@@ -194,7 +187,6 @@ const App: React.FC = () => {
           selectedFile={activeTabPath}
           loading={treeLoading}
         />
-
         {/* Editor + Tabs */}
         {activeTab ? (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -240,7 +232,6 @@ const App: React.FC = () => {
         ) : (
           <WelcomeScreen projectName={projectName} />
         )}
-
         {/* Chat Panel */}
         <ChatPanel
           messages={messages}
@@ -248,7 +239,7 @@ const App: React.FC = () => {
           isProcessing={isProcessing}
           onClear={clearMessages}
           onStop={stopGeneration}
-          currentModel={currentModel}          currentModel={currentModel}
+          currentModel={currentModel}
           onChangeModel={(m: string) => {
             console.log(`[DEBUG change-model] Changement de modele: "${m}"`);
             setCurrentModel(m);
@@ -257,9 +248,9 @@ const App: React.FC = () => {
             } else {
               console.warn(`[DEBUG change-model] Socket non connecte, modele "${m}" non transmis au serveur`);
             }
-          }}        />
+          }}
+        />
       </div>
-
       {/* Status Bar */}
       <StatusBar
         currentFile={activeTabPath}
