@@ -155,38 +155,16 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({
   if (!filePath) return null;
 
   return (
-    <div className="editor-panel">
-      <div className="editor-tabs">
-        <button className="editor-tab active">
-          <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              background:
-                syncState === 'saved'
-                  ? '#22c55e'
-                  : syncState === 'saving'
-                  ? '#f59e0b'
-                  : '#ef4444',
-            }}
-          />
-          {filePath.split('/').pop()}
-          {syncState === 'modified' && (
-            <span style={{ color: '#f59e0b', fontSize: 10, marginLeft: 4 }}>modifie</span>
-          )}
-          {syncState === 'saving' && (
-            <span style={{ color: '#f59e0b', fontSize: 10, marginLeft: 4 }}>sauvegarde...</span>
-          )}
-        </button>
-      </div>
-      <div className="editor-container">
+    <div className="editor-panel" style={{ width: '100%', height: '100%' }}>
+      <div className="editor-container" style={{ width: '100%', height: '100%' }}>
         <Editor
           key={filePath}
           defaultLanguage={fileLanguage || 'plaintext'}
           language={fileLanguage || 'plaintext'}
           defaultValue=""
           theme="vs-dark"
+          width="100%"
+          height="100%"
           options={EDITOR_OPTIONS}
           onMount={handleEditorDidMount}
           onChange={handleChange}
