@@ -157,6 +157,16 @@ export class ImaraClient {
             if (response.status === 429) {
               throw new Error('Le service est temporairement saturé (code 429). Réessayez dans quelques secondes.');
             }
+            if (response.status === 503) {
+              let maintenanceMsg = 'Imara est actuellement en maintenance. Réessayez plus tard.';
+              try {
+                const errBody = await response.json() as Record<string, unknown>;
+                if (errBody?.error === 'maintenance' && errBody?.message) {
+                  maintenanceMsg = `Imara est en maintenance : ${errBody.message}`;
+                }
+              } catch (_e) { /* ignore */ }
+              throw new Error(maintenanceMsg);
+            }
             if (response.status >= 500) {
               throw new Error(`Le service Imara est temporairement indisponible (code ${response.status}). Réessayez dans un instant.`);
             }
