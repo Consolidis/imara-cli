@@ -10,12 +10,18 @@ import WelcomeScreen from './components/WelcomeScreen';
 import StatusBar from './components/StatusBar';
 import ConductorPanel from './components/ConductorPanel';
 import { useConductorData } from './hooks/useConductorData';
+import DiffViewer from './components/DiffViewer';
 import { FileContent, FileNode } from './types';
 
 interface Tab {
   path: string;
   language: string;
   content: string | null;
+}
+
+interface FileDiff {
+  path: string;
+  diff: string;
 }
 
 function findFirstFile(nodes: FileNode[]): string | null {
@@ -40,6 +46,8 @@ const App: React.FC = () => {
   const [projectPath, setProjectPath] = useState<string>('');
   const [gitDiffCount, setGitDiffCount] = useState<number>(0);
   const [showConductor, setShowConductor] = useState<boolean>(false);
+  const [fileDiff, setFileDiff] = useState<FileDiff | null>(null);
+  const [fileDiffs, setFileDiffs] = useState<Map<string, string>>(new Map());
   const conductorData = useConductorData(socket);
   const activeTab = openTabs.find(t => t.path === activeTabPath) || null;
   const fileContentCache = useRef<Map<string, string>>(new Map());
@@ -125,15 +133,22 @@ const App: React.FC = () => {
     });
   }, [activeTabPath]);
 
-  const handleContentChange = useCallback((path: string, content: string) => {
+  const handleContentChange = useCallback((path: string, content: string) => {  const handleContentChange = useCallback((path: string, content: string) => {
     setOpenTabs(prev => prev.map(t => (t.path === path ? { ...t, content } : t)));
     fileContentCache.current.set(path, content);
   }, []);
 
+  // Refs pour eviter les stale closures dans les handlers socket
+  const openTabsRef = useRef(openTabs);
+  openTabsRef.current = openTabs;
+  const handleSelectFileRef = useRef(handleSelectFile);
+  handleSelectFileRef.current = handleSelectFile;
+
   useEffect(() => {
     if (!socket) return;
     const handleFileUpdated = (data: { path: string; event: string }) => {
-      const tab = openTabs.find(t => t.path === data.path || t.path.endsWith(data.path));
+      const currentTabs = openTabsRef.current;
+      const tab = currentTabs.find(t => t.path === data.path || t.path.endsWith(data.path));
       if (!tab) return;
       socket.emit('read-file', { path: tab.path }, (result: FileContent & { error?: string }) => {
         if (!result.error) {
@@ -142,8 +157,32 @@ const App: React.FC = () => {
       });
     };
     socket.on('file-updated', handleFileUpdated);
-    return () => { socket.off('file-updated', handleFileUpdated); };
-  }, [socket, openTabs]);
+    // Ecouter les evenements file-written pour ouvrir automatiquement le fichier avec diff
+    const handleFileWritten = (data: { path: string; diff: string; sessionId: string; timestamp: number }) => {
+      console.log(`[App] Fichier modifie par l'agent: "${data.path}"`);
+      // Recharger le contenu du fichier
+      const currentTabs = openTabsRef.current;
+      const alreadyOpen = currentTabs.some(t => t.path === data.path);
+      if (!alreadyOpen) {
+        handleSelectFileRef.current(data.path);
+      } else {
+        setActiveTabPath(data.path);
+        // Recharger le contenu du fichier ouvert
+        socket.emit('read-file', { path: data.path }, (result: FileContent & { error?: string }) => {
+          if (!result.error) {
+            setOpenTabs(prev => prev.map(t => (t.path === data.path ? { ...t, content: result.content, language: result.language } : t)));
+          }
+        });
+      }
+      // Stocker le diff pour affichage
+      setFileDiff({ path: data.path, diff: data.diff });
+    };
+    socket.on('file-written', handleFileWritten);
+    return () => {
+      socket.off('file-updated', handleFileUpdated);
+      socket.off('file-written', handleFileWritten);
+    };
+  }, [socket]);  }, [socket, openTabs]);
 
   const handleRequestGitDiff = useCallback(() => {
     if (!socket) return;
@@ -223,6 +262,13 @@ const App: React.FC = () => {
                 </button>
               ))}
             </div>
+            {fileDiff && fileDiff.path === activeTab.path && (
+              <DiffViewer
+                diff={fileDiff.diff}
+                fileName={fileDiff.path.split('/').pop() || fileDiff.path}
+                onClose={() => setFileDiff(null)}
+              />
+            )}
             <div style={{ flex: 1, overflow: 'hidden' }}>
               <MonacoEditor
                 key={activeTab.path}
@@ -237,7 +283,6 @@ const App: React.FC = () => {
         ) : (
           <WelcomeScreen projectName={projectName} />
         )}
-
         {showConductor && (
           <ConductorPanel
             data={conductorData.data}
@@ -245,6 +290,7 @@ const App: React.FC = () => {
             error={conductorData.error}
             onRefresh={conductorData.refresh}
             onClose={() => setShowConductor(false)}
+            socket={socket}
           />
         )}
         <ChatPanel

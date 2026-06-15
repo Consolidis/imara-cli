@@ -21,7 +21,6 @@ function formatTime(ts: number): string {
   const d = new Date(ts);
   return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }
-
 const ChatPanel: React.FC<ChatPanelProps> = ({
   messages,
   onSendMessage,
@@ -35,12 +34,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -62,13 +59,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   };
 
-  // Detecter si un message est une pensee (reasoning)
   function isReasoning(msg: ChatMessage): boolean {
     return msg.type === 'reasoning'
       || (msg.role === 'assistant' && /^[\s]*[🧠💭]/.test(msg.content))
       || (msg.role === 'assistant' && /^[\s]*Pens[eé]e\s*:/.test(msg.content));
   }
-  // Nettoyer TOUTES les lignes de prefixe "Pensée :" ou "🧠 Pensée :" du contenu
+
   function cleanReasoningContent(raw: string): string {
     return raw
       .split('\n')
@@ -84,11 +80,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
   return (
     <div className="chat-panel">
-      {/* Header */}
       <div className="chat-header">
         <span>Assistant IMARA</span>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {/* Selecteur de modele */}
           {onChangeModel && (
             <select
               value={currentModel}
@@ -124,10 +118,36 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         </div>
       </div>
 
-      {/* Messages */}
       <div className="chat-messages">
         {messages.map((msg) => {
-          // Si le message est vide apres nettoyage, on le saute completement
+          if (msg.type === 'diff') {
+            const fileName = msg.filePath ? msg.filePath.split('/').pop() || msg.filePath : 'fichier';
+            const diffLines = msg.content.split('\n');
+            return (
+              <div key={msg.id} className="chat-msg diff">
+                <div className="diff-msg-header">Diff \u2014 {fileName}</div>
+                <div className="diff-msg-content">
+                  {diffLines.map((line, i) => {
+                    if (line.startsWith('@@')) {
+                      return <div key={i} className="diff-msg-hunk">{line}</div>;
+                    }
+                    if (line.startsWith('+')) {
+                      return <div key={i} className="diff-msg-add">{line}</div>;
+                    }
+                    if (line.startsWith('-')) {
+                      return <div key={i} className="diff-msg-remove">{line}</div>;
+                    }
+                    if (line.startsWith('diff --git') || line.startsWith('index') || line.startsWith('---') || line.startsWith('+++')) {
+                      return null;
+                    }
+                    return <div key={i} className="diff-msg-ctx">{line}</div>;
+                  })}
+                </div>
+                <div className="timestamp">{formatTime(msg.timestamp)}</div>
+              </div>
+            );
+          }
+
           if (isReasoning(msg)) {
             const cleanedContent = cleanReasoningContent(msg.content);
             if (!cleanedContent) return null;
@@ -139,9 +159,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
               </div>
             );
           }
+
           return (
             <div key={msg.id} className={`chat-msg ${msg.role}`}>
-              {msg.content}
+              <div className="msg-content-text">{msg.content}</div>
               <div className="timestamp">{formatTime(msg.timestamp)}</div>
             </div>
           );
@@ -154,7 +175,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
       <div className="chat-input-area">
         <textarea
           ref={textareaRef}

@@ -1,5 +1,12 @@
-import React, { useState, useMemo } from 'react';
-import { ConductorData, TrackMeta } from '../hooks/useConductorData';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { ConductorData } from '../hooks/useConductorData';
+
+interface GitData {
+  commits: string;
+  status: string;
+  diff: string;
+  timestamp: number;
+}
 
 interface ConductorPanelProps {
   data: ConductorData;
@@ -7,6 +14,7 @@ interface ConductorPanelProps {
   error: string | null;
   onRefresh: () => void;
   onClose: () => void;
+  socket?: any; // Socket.IO client instance
 }
 
 function formatDate(iso: string): string {
@@ -35,6 +43,7 @@ function statusLabel(status: string, validated: boolean): string {
 }
 
 type ListTab = 'active' | 'archived';
+type DetailTab = 'plan' | 'spec' | 'logs' | 'workflow' | 'git';
 
 const ConductorPanel: React.FC<ConductorPanelProps> = ({
   data,
@@ -42,10 +51,17 @@ const ConductorPanel: React.FC<ConductorPanelProps> = ({
   error,
   onRefresh,
   onClose,
+  socket,
 }) => {
   const [selectedTrack, setSelectedTrack] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'spec' | 'plan' | 'logs' | 'workflow'>('plan');
+  const [activeTab, setActiveTab] = useState<DetailTab>('git');
   const [listTab, setListTab] = useState<ListTab>('active');
+
+  // Git state
+  const [gitData, setGitData] = useState<GitData | null>(null);
+  const [gitLoading, setGitLoading] = useState<boolean>(false);
+  const [gitPushing, setGitPushing] = useState<boolean>(false);
+  const [gitPushResult, setGitPushResult] = useState<string | null>(null);
 
   const { tracks, progress, spec, workflow, logs, registre } = data;
 
@@ -59,10 +75,8 @@ const ConductorPanel: React.FC<ConductorPanelProps> = ({
     [tracks]
   );
 
-  // Determine which list to show based on active listTab
   const currentList = listTab === 'active' ? activeTracks : archivedTracks;
 
-  // Sort: active/done first within each list
   const sortedTracks = useMemo(
     () => [...currentList].sort((a, b) => {
       if (a.status === 'active') return -1;
@@ -75,10 +89,58 @@ const ConductorPanel: React.FC<ConductorPanelProps> = ({
   const selectedProgress = selectedTrack ? progress[selectedTrack] : null;
   const selectedMeta = selectedTrack ? tracks.find(t => t.id === selectedTrack) : null;
 
-  // If selected track is no longer visible, deselect
   const effectiveSelected = selectedMeta && sortedTracks.some(t => t.id === selectedTrack)
     ? selectedTrack
     : null;
+
+  // Auto-switch tab: when selecting a track, show plan; when deselecting, show git
+  useEffect(() => {
+    if (effectiveSelected) {
+      setActiveTab('plan');
+    } else {
+      setActiveTab('git');
+    }
+  }, [effectiveSelected]);
+
+  // Load Git data when the Git tab is selected
+  const loadGitData = useCallback(() => {
+    if (!socket) return;
+    setGitLoading(true);
+    setGitPushResult(null);
+    socket.emit('request-git-log', (result: GitData & { error?: string }) => {
+      if (result.error) {
+        setGitData(null);
+      } else {
+        setGitData({
+          commits: result.commits || '',
+          status: result.status || '',
+          diff: result.diff || '',
+          timestamp: result.timestamp || Date.now(),
+        });
+      }
+      setGitLoading(false);
+    });
+  }, [socket]);
+
+  useEffect(() => {
+    if (activeTab === 'git') {
+      loadGitData();
+    }
+  }, [activeTab, loadGitData]);
+
+  const handlePush = useCallback(() => {
+    if (!socket || gitPushing) return;
+    setGitPushing(true);
+    setGitPushResult(null);
+    socket.emit('request-git-push', (result: { success: boolean; message: string }) => {
+      setGitPushResult(result.message);
+      setGitPushing(false);
+      // Reload git data after push
+      loadGitData();
+    });
+  }, [socket, gitPushing, loadGitData]);
+
+  const isGitTab = activeTab === 'git';
 
   return (
     <div className="conductor-panel">
@@ -100,7 +162,6 @@ const ConductorPanel: React.FC<ConductorPanelProps> = ({
         </div>
       )}
 
-      {/* Filter tabs: Active / Archived */}
       <div className="conductor-filter-tabs">
         <button
           className={`cond-filter-tab ${listTab === 'active' ? 'active' : ''}`}
@@ -117,7 +178,6 @@ const ConductorPanel: React.FC<ConductorPanelProps> = ({
       </div>
 
       <div className="conductor-body">
-        {/* Zone 1: Track list (scrollable) */}
         <div className="conductor-track-list">
           {loading && tracks.length === 0 && (
             <div className="conductor-loading">Chargement...</div>
@@ -130,7 +190,10 @@ const ConductorPanel: React.FC<ConductorPanelProps> = ({
               <div
                 key={track.id}
                 className={`conductor-track-card ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''}`}
-                onClick={() => setSelectedTrack(isSelected ? null : track.id)}
+                onClick={() => {
+                  setSelectedTrack(isSelected ? null : track.id);
+                  if (isGitTab) setActiveTab('plan');
+                }}
               >
                 <div className="conductor-track-header">
                   <span className="conductor-track-icon">{statusIcon(track.status, track.validated)}</span>
@@ -161,35 +224,16 @@ const ConductorPanel: React.FC<ConductorPanelProps> = ({
           )}
         </div>
 
-        {/* Zone 2: Detail panel (fixed, non-scrollable) */}
         <div className="conductor-detail-zone">
+          {/* If a track is selected, show track detail tabs + optional Git tab */}
           {effectiveSelected && selectedMeta ? (
             <>
               <div className="conductor-detail-tabs">
-                <button
-                  className={`cond-tab ${activeTab === 'plan' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('plan')}
-                >
-                  Plan
-                </button>
-                <button
-                  className={`cond-tab ${activeTab === 'spec' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('spec')}
-                >
-                  Spec
-                </button>
-                <button
-                  className={`cond-tab ${activeTab === 'logs' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('logs')}
-                >
-                  Logs
-                </button>
-                <button
-                  className={`cond-tab ${activeTab === 'workflow' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('workflow')}
-                >
-                  Workflow
-                </button>
+                <button className={`cond-tab ${activeTab === 'plan' ? 'active' : ''}`} onClick={() => setActiveTab('plan')}>Plan</button>
+                <button className={`cond-tab ${activeTab === 'spec' ? 'active' : ''}`} onClick={() => setActiveTab('spec')}>Spec</button>
+                <button className={`cond-tab ${activeTab === 'logs' ? 'active' : ''}`} onClick={() => setActiveTab('logs')}>Logs</button>
+                <button className={`cond-tab ${activeTab === 'workflow' ? 'active' : ''}`} onClick={() => setActiveTab('workflow')}>Workflow</button>
+                <button className={`cond-tab ${activeTab === 'git' ? 'active' : ''}`} onClick={() => setActiveTab('git')}>Git</button>
               </div>
               <div className="conductor-detail-content">
                 {activeTab === 'plan' && (
@@ -214,31 +258,80 @@ const ConductorPanel: React.FC<ConductorPanelProps> = ({
                 {activeTab === 'workflow' && (
                   <pre className="cond-markdown">{workflow || '(Aucun workflow defini)'}</pre>
                 )}
+                {isGitTab && renderGitContent()}
               </div>
             </>
           ) : (
             <>
-              {!effectiveSelected && registre && (
-                <>
-                  <div className="conductor-detail-tabs">
-                    <span className="cond-tab passive">Registre</span>
-                  </div>
-                  <div className="conductor-detail-content">
-                    <pre className="cond-markdown">{registre}</pre>
-                  </div>
-                </>
-              )}
-              {!effectiveSelected && !registre && (
-                <div className="conductor-detail-tabs">
-                  <span className="cond-tab passive">Details</span>
-                </div>
-              )}
+              {/* No track selected: show Git tab alone or registre */}
+              <div className="conductor-detail-tabs">
+                <button className={`cond-tab ${activeTab === 'git' ? 'active' : ''}`} onClick={() => setActiveTab('git')}>Git</button>
+                {registre && <span className="cond-tab passive">Registre</span>}
+              </div>
+              <div className="conductor-detail-content">
+                {isGitTab && renderGitContent()}
+                {activeTab !== 'git' && registre && (
+                  <pre className="cond-markdown">{registre}</pre>
+                )}
+              </div>
             </>
           )}
         </div>
       </div>
     </div>
   );
+
+  function renderGitContent() {
+    if (!socket) {
+      return <div className="cond-empty">Socket non connecte.</div>;
+    }
+    if (gitLoading && !gitData) {
+      return <div className="cond-empty">Chargement des donnees Git...</div>;
+    }
+    return (
+      <div className="cond-git-panel">
+        {/* Push button + result */}
+        <div className="cond-git-actions">
+          <button
+            className="cond-git-push-btn"
+            onClick={handlePush}
+            disabled={gitPushing}
+          >
+            {gitPushing ? 'Push en cours...' : 'Push'}
+          </button>
+          {gitPushResult && (
+            <div className={`cond-git-push-result ${gitPushResult.includes('succes') || gitPushResult.includes('Everything') ? 'success' : 'error'}`}>
+              {gitPushResult}
+            </div>
+          )}
+        </div>
+
+        {/* Git status */}
+        {gitData?.status && (
+          <div className="cond-git-section">
+            <div className="cond-git-section-title">Status</div>
+            <pre className="cond-markdown">{gitData.status || '(aucune modification)'}</pre>
+          </div>
+        )}
+
+        {/* Recent commits */}
+        {gitData?.commits && (
+          <div className="cond-git-section">
+            <div className="cond-git-section-title">Commits recents</div>
+            <pre className="cond-markdown">{gitData.commits}</pre>
+          </div>
+        )}
+
+        {/* Diff */}
+        {gitData?.diff && (
+          <div className="cond-git-section">
+            <div className="cond-git-section-title">Diff</div>
+            <pre className="cond-markdown cond-git-diff">{gitData.diff}</pre>
+          </div>
+        )}
+      </div>
+    );
+  }
 };
 
 export default ConductorPanel;

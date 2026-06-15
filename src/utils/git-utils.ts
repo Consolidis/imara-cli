@@ -24,4 +24,22 @@ export class GitUtils {
       return '';
     }
   }
+
+  static getFileDiff(filePath: string): string {
+    try {
+      return execSync(`git diff -- "${filePath}"`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+    } catch {
+      return '';
+    }
+  }
+
+  static push(): { success: boolean; message: string } {
+    try {
+      const out = execSync('git push', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+      return { success: true, message: out || 'Push effectue avec succes.' };
+    } catch (err: any) {
+      const msg = err?.stderr?.toString().trim() || err?.message || 'Erreur inconnue lors du push.';
+      return { success: false, message: msg };
+    }
+  }
 }

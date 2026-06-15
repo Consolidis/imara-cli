@@ -2,10 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Socket } from 'socket.io-client';
 import { ChatMessage } from '../types';
 
-/**
- * Hook pour la gestion du chat avec l'agent IA via Socket.io.
- * Chaque message est une entite complete (pas de streaming/fusion).
- */
 export function useChat(socket: Socket | null): {
   messages: ChatMessage[];
   sendMessage: (text: string) => void;
@@ -17,7 +13,7 @@ export function useChat(socket: Socket | null): {
     {
       id: 'system-welcome',
       role: 'system',
-      content: 'Bienvenue dans IMARA Studio. Posez votre question à l\'agent.',
+      content: "Bienvenue dans IMARA Studio. Posez votre question a l'agent.",
       timestamp: Date.now(),
     },
   ]);
@@ -26,6 +22,7 @@ export function useChat(socket: Socket | null): {
 
   useEffect(() => {
     if (!socket) return;
+
     const handleResponse = (data: {
       sessionId: string;
       role: 'user' | 'assistant' | 'tool' | 'system';
@@ -44,6 +41,7 @@ export function useChat(socket: Socket | null): {
         },
       ]);
     };
+
     const handleReasoning = (data: {
       sessionId: string;
       content: string;
@@ -60,6 +58,7 @@ export function useChat(socket: Socket | null): {
         },
       ]);
     };
+
     const handleToolCall = (data: {
       sessionId: string;
       content: string;
@@ -75,9 +74,30 @@ export function useChat(socket: Socket | null): {
         },
       ]);
     };
+
+    const handleDiff = (data: {
+      sessionId: string;
+      path: string;
+      content: string;
+      timestamp: number;
+    }) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `diff_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          role: 'assistant',
+          content: data.content,
+          type: 'diff',
+          filePath: data.path,
+          timestamp: data.timestamp,
+        },
+      ]);
+    };
+
     const handleDone = () => {
       setIsProcessing(false);
     };
+
     const handleError = (data: {
       sessionId: string;
       error: string;
@@ -94,15 +114,18 @@ export function useChat(socket: Socket | null): {
         },
       ]);
     };
+
     socket.on('chat-response', handleResponse);
     socket.on('chat-reasoning', handleReasoning);
     socket.on('chat-tool-call', handleToolCall);
+    socket.on('chat-diff', handleDiff);
     socket.on('chat-done', handleDone);
     socket.on('chat-error', handleError);
     return () => {
       socket.off('chat-response', handleResponse);
       socket.off('chat-reasoning', handleReasoning);
       socket.off('chat-tool-call', handleToolCall);
+      socket.off('chat-diff', handleDiff);
       socket.off('chat-done', handleDone);
       socket.off('chat-error', handleError);
     };
@@ -132,7 +155,7 @@ export function useChat(socket: Socket | null): {
       {
         id: 'system-cleared',
         role: 'system',
-        content: 'Historique efface. Posez votre question a l\'agent.',
+        content: "Historique efface. Posez votre question a l'agent.",
         timestamp: Date.now(),
       },
     ]);

@@ -57,7 +57,6 @@ function isToolOutput(text: string): boolean {
 const socketModelMap = new Map<string, string>();
 
 export class BrowserAgentBridge {
-
   static setModelForSocket(socketId: string, model: string): void {
     console.log(`[BrowserAgentBridge] Modele enregistre pour socket ${socketId}: "${model}"`);
     socketModelMap.set(socketId, model);
@@ -115,10 +114,8 @@ export class BrowserAgentBridge {
         content: message,
         timestamp: Date.now(),
       });
-
       const originalWrite = process.stdout.write.bind(process.stdout);
       let partialLine = '';
-      const reasoningLines: string[] = [];
       const responseLines: string[] = [];
       const writeInterceptor: (...args: any[]) => boolean = (chunk: any, encoding?: any, callback?: any): boolean => {
         const raw = typeof chunk === 'string' ? chunk : chunk.toString();
@@ -132,13 +129,46 @@ export class BrowserAgentBridge {
           const hasItalicStyle = /\x1b\[3m/.test(rawLine) || /\x1b\[2m/.test(rawLine);
           if (isToolOutput(cleaned)) {
             socket.emit('chat-tool-call', { sessionId, content: cleaned, timestamp: Date.now() });
+            // Detecter les ecritures de fichiers pour emettre file-written avec diff
+            // Format 1: "✓ Write → Fichier path/to/file ecrit avec succes (42 lignes)."
+            let writeMatch = cleaned.match(/^✓\s*(Write|Update|Edit|Append)\s*→\s*Fichier\s+(.+?)\s+(?:écrit|sauvegardé|modifié)/i);
+            if (!writeMatch) {
+              // Format 2: "✓ Write(path/to/file)"
+              writeMatch = cleaned.match(/^✓\s*(Write|Update|Edit|Append)\s*\((.+?)\)/i);
+            }
+            if (writeMatch) {
+              let filePath = writeMatch[2].trim();
+              const pathModule = require('path');
+              const cwd = process.cwd();
+              if (!filePath.startsWith('/') && !filePath.match(/^[A-Za-z]:\\/)) {
+                filePath = pathModule.resolve(cwd, filePath);
+              }
+              const relPath = pathModule.relative(cwd, filePath).replace(/\\/g, '/');
+              const { GitUtils } = require('../utils/git-utils');
+              const diff = GitUtils.getFileDiff(filePath);
+              socket.emit('file-written', {
+                sessionId,
+                path: relPath,
+                diff: diff || '',
+                timestamp: Date.now(),
+              });
+              // Emettre le diff dans le chat
+              if (diff) {
+                socket.emit('chat-diff', {
+                  sessionId,
+                  path: relPath,
+                  content: diff,
+                  timestamp: Date.now(),
+                });
+              }
+            }
             return;
           }
           if (hasItalicStyle || isReasoningLine(cleaned)) {
-            reasoningLines.push(cleaned);
-          } else {
-            responseLines.push(cleaned);
+            socket.emit('chat-reasoning', { sessionId, content: cleaned, timestamp: Date.now() });
+            return;
           }
+          responseLines.push(cleaned);
         };
         for (const seg of segmentsByCr) {
           const subLines = seg.split('\n');
@@ -155,29 +185,19 @@ export class BrowserAgentBridge {
         return originalWrite(chunk, encoding, callback);
       };
       (process.stdout as any).write = writeInterceptor;
-
       try {
         await session.agent.run(message);
-
         if (partialLine.trim()) {
           const cleaned = cleanLine(partialLine);
           if (cleaned && !isJunkLine(cleaned) && !isSpinnerLine(cleaned)) {
             if (isToolOutput(cleaned)) {
               socket.emit('chat-tool-call', { sessionId, content: cleaned, timestamp: Date.now() });
             } else if (isReasoningLine(cleaned) || /\x1b\[3m/.test(partialLine) || /\x1b\[2m/.test(partialLine)) {
-              reasoningLines.push(cleaned);
+              socket.emit('chat-reasoning', { sessionId, content: cleaned, timestamp: Date.now() });
             } else {
               responseLines.push(cleaned);
             }
           }
-        }
-
-        if (reasoningLines.length > 0) {
-          socket.emit('chat-reasoning', {
-            sessionId,
-            content: reasoningLines.join('\n'),
-            timestamp: Date.now(),
-          });
         }
         if (responseLines.length > 0) {
           socket.emit('chat-response', {
@@ -239,7 +259,6 @@ export class BrowserAgentBridge {
     };
   }
 
-  /** Clear (destroy) the active session for a given socket, so it gets re-created on next message */
   static clearSessionForSocket(socketId: string): void {
     for (const [sessionId, session] of activeSessions) {
       if (session.socket.id === socketId) {

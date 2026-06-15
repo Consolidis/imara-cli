@@ -29,19 +29,35 @@ export function setupSocketHandlers(
   io: SocketServer,
   onChatMessage: (socket: Socket, message: string, sessionId: string) => Promise<void>
 ): void {
+
+  // Cache + throttle pour list-directory (evite la boucle infinie)
+  let lastListDirTime = 0;
+  let cachedTree: FileNode[] | null = null;
+  const LIST_DIR_THROTTLE_MS = 3000;
+
   io.on('connection', (socket: Socket) => {
     console.log(`[Browser IDE] Client connecte: ${socket.id}`);
 
     socket.on('list-directory', async (_data: unknown, callback?: (nodes: FileNode[]) => void) => {
+      const now = Date.now();
+      if (now - lastListDirTime < LIST_DIR_THROTTLE_MS && cachedTree !== null) {
+        if (typeof callback === 'function') {
+          callback(cachedTree);
+        } else {
+          socket.emit('directory-listing', cachedTree);
+        }
+        return;
+      }
       try {
         const rootPath = process.cwd();
         console.log(`[Browser IDE] Construction arborescence depuis: ${rootPath}`);
-        const tree = await buildFileTree(rootPath, rootPath, 0);
-        console.log(`[Browser IDE] Arborescence construite: ${tree.length} elements racine`);
+        cachedTree = await buildFileTree(rootPath, rootPath, 0);
+        lastListDirTime = Date.now();
+        console.log(`[Browser IDE] Arborescence construite: ${cachedTree.length} elements racine`);
         if (typeof callback === 'function') {
-          callback(tree);
+          callback(cachedTree);
         } else {
-          socket.emit('directory-listing', tree);
+          socket.emit('directory-listing', cachedTree);
         }
       } catch (err: any) {
         console.error(`[Browser IDE] Erreur construction arborescence: ${err.message}`);
@@ -104,7 +120,6 @@ export function setupSocketHandlers(
       console.log(`[Socket/change-model] Client ${socket.id} change de modele: "${data.model}"`);
       const { BrowserAgentBridge } = require('./browser-agent');
       BrowserAgentBridge.setModelForSocket(socket.id, data.model);
-      // Destroy existing session so next chat-message recreates agent with new model
       BrowserAgentBridge.clearSessionForSocket(socket.id);
       socket.emit('model-changed', { model: data.model, timestamp: Date.now() });
     });
@@ -123,7 +138,33 @@ export function setupSocketHandlers(
       }
     });
 
-    // --- REQUEST CONDUCTOR : retourne tracks, progression, spec, logs, workflow ---
+    socket.on('request-git-log', (_data: unknown, callback?: (result: any) => void) => {
+      try {
+        const commits = GitUtils.getRecentCommits(15);
+        const status = GitUtils.getGitStatus();
+        const diff = GitUtils.getDiff();
+        const result = { commits, status, diff, timestamp: Date.now() };
+        if (typeof callback === 'function') { callback(result); }
+        else { socket.emit('git-log-result', result); }
+      } catch (err: any) {
+        const errorResult = { error: err.message, timestamp: Date.now() };
+        if (typeof callback === 'function') { callback(errorResult); }
+        else { socket.emit('git-log-error', errorResult); }
+      }
+    });
+
+    socket.on('request-git-push', async (_data: unknown, callback?: (result: any) => void) => {
+      try {
+        const pushResult = GitUtils.push();
+        if (typeof callback === 'function') { callback(pushResult); }
+        else { socket.emit('git-push-result', pushResult); }
+      } catch (err: any) {
+        const errorResult = { success: false, message: err.message };
+        if (typeof callback === 'function') { callback(errorResult); }
+        else { socket.emit('git-push-error', errorResult); }
+      }
+    });
+
     socket.on('request-conductor', (_data: unknown, callback?: (result: any) => void) => {
       try {
         const active = TrackManager.getActive();
@@ -154,9 +195,12 @@ export function setupSocketHandlers(
       }
     });
 
-    socket.on('stop-generation', (_data: unknown) => {
-      console.log(`[Browser IDE] Arret demande par le client: ${socket.id}`);
-      socket.emit('generation-stopped', { timestamp: Date.now() });
+    socket.on('stop-generation', (data: { sessionId?: string }) => {
+      const sessionId = data?.sessionId || `session_${socket.id}`;
+      console.log(`[Browser IDE] Arret demande par le client: ${socket.id} session=${sessionId}`);
+      const { BrowserAgentBridge } = require('./browser-agent');
+      BrowserAgentBridge.cancelGeneration(sessionId);
+      socket.emit('generation-stopped', { sessionId, timestamp: Date.now() });
     });
 
     socket.on('disconnect', (reason: string) => {

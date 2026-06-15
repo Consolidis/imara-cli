@@ -15,7 +15,9 @@ export interface ChatMessage {
   content: string;
   toolName?: string;
   toolArgs?: Record<string, unknown>;
-  type?: 'reasoning' | 'response';
+  type?: 'reasoning' | 'response' | 'diff';
+  /** Chemin du fichier concerne (pour les messages de type diff) */
+  filePath?: string;
   timestamp: number;
 }
 
