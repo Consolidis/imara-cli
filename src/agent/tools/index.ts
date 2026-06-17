@@ -31,11 +31,12 @@ import { GitCommitTool } from './git-commit.tool';
 import { AtomicSectionReplaceTool } from './atomic-section-replace.tool';
 import { BatchImportAddTool } from './batch-import-add.tool';
 import { ValidateFileTool } from './validate-file.tool';
+import { InvestigateFileTool } from './investigate-file.tool';
 
 // Outils "purs" (lecture seule) dont les resultats sont mis en cache (TTL 30s)
 const CACHED_TOOLS = new Set([
   'read_file', 'read_file_range', 'inspect_file', 'code_map',
-  'git_diff', 'list_directory'
+  'git_diff', 'list_directory', 'investigate_file'
 ]);
 
 export const TOOLS_DEFINITIONS: ToolDefinition[] = [
@@ -51,8 +52,8 @@ export const TOOLS_DEFINITIONS: ToolDefinition[] = [
   GitCommitTool.definition,
   AtomicSectionReplaceTool.definition,
   BatchImportAddTool.definition,
-  ValidateFileTool.definition
-];
+  ValidateFileTool.definition,
+  InvestigateFileTool.definition];
 
 export class ToolExecutor {
   static async execute(name: string, args: ToolArguments, agent?: AgentProxy): Promise<Result<string, ImaraError>> {
@@ -158,6 +159,10 @@ export class ToolExecutor {
           break;
         case 'validate_file':
           result = await ValidateFileTool.run(args as { path: string });
+          break;
+
+        case 'investigate_file':
+          result = await InvestigateFileTool.run(args as any);
           break;
         default:
           return err(new ImaraError(ErrorCategory.UNKNOWN, 'TOOL_UNKNOWN', `Tool inconnu: ${name}`));

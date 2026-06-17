@@ -450,13 +450,14 @@ export class Agent {
     return name === 'run_command' || name === 'write_file' || name === 'delete_file';
   }
 
+
   /** Outils sans side-effect pouvant être parallélisés */
   private isReadOnlyTool(name: string): boolean {
     return [
       'read_file', 'read_file_range', 'inspect_file', 'code_map',
       'list_directory', 'git_diff', 'search_files', 'read_multiple_files',
       'smart_read', 'workspace_index', 'diff_preview',
-      'project_summary', 'web_search'
+      'project_summary', 'web_search', 'investigate_file'
     ].includes(name);
   }
 
