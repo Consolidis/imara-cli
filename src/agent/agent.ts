@@ -59,6 +59,8 @@ export class Agent {
     timestamp: number;
   }[] = [];
   private preloadedSystemPrompt: string | null = null;
+  /** Flag indiquant que le bloc DYNAMIC du system prompt doit etre rafraichi */
+  private dynamicContextDirty = false;
 
   constructor(options: AgentOptions = {}) {
     const cfg = ConfigManager.get();
@@ -78,12 +80,12 @@ export class Agent {
     });
   }
 
-  /** Lance le préchargement du contexte en arrière-plan (fire & forget) */
+  /** Lance le préchargement du contexte dynamique en arrière-plan (fire & forget) */
   initContext(): void {
-    ContextBuilder.buildSystemPrompt(this.options).then(prompt => {
-      this.preloadedSystemPrompt = prompt;
+    ContextBuilder.buildDynamicContext(this.options).then(context => {
+      this.preloadedSystemPrompt = context;
     }).catch(() => {
-      // Échec silencieux — run() construira le prompt normalement
+      // Échec silencieux — run() construira le contexte normalement
     });
   }
 
@@ -106,8 +108,15 @@ export class Agent {
       this.client = new ImaraClient(apiKey || '');
     }
     if (this.messages.length === 0) {
-      const systemPrompt = this.preloadedSystemPrompt || await ContextBuilder.buildSystemPrompt(this.options);
-      this.messages.push({ role: 'system', content: systemPrompt });
+      // messages[0] = STATIC system prompt (ne change jamais en session)
+      // messages[1] = DYNAMIC context (git status, projet, track)
+      const staticPrompt = ContextBuilder.buildStaticSystemPrompt();
+      const dynamicContext = this.preloadedSystemPrompt
+        ? this.preloadedSystemPrompt
+        : await ContextBuilder.buildDynamicContext(this.options);
+      this.messages.push({ role: 'system', content: staticPrompt });
+      this.messages.push({ role: 'system', content: dynamicContext });
+      this.dynamicContextDirty = false;
     }
     this.messages.push({ role: 'user', content: prompt });
     this.resetCancellation();
@@ -173,14 +182,16 @@ export class Agent {
 
       uiEvents.setPhase('thinking');
       try {
-        // Dynamic Context Refresh: Keep system prompt (git status, active track, project map) 100% fresh in every turn
-        if (this.messages.length > 0 && this.messages[0].role === 'system') {
+        // Dynamic Context Refresh: regenerer UNIQUEMENT le bloc DYNAMIC (messages[1])
+        // apres un outil avec side-effect qui modifie git status, projet ou track.
+        if (this.dynamicContextDirty && this.messages.length > 1 && this.messages[1].role === 'system') {
           try {
-            const freshSystemPrompt = await ContextBuilder.buildSystemPrompt(this.options);
-            this.messages[0].content = freshSystemPrompt;
+            const freshDynamic = await ContextBuilder.buildDynamicContext(this.options);
+            this.messages[1].content = freshDynamic;
           } catch (_err) {
-            // Fallback silently if system prompt build fails
+            // Fallback silently
           }
+          this.dynamicContextDirty = false;
         }
         startThinkingSpinner();
         const response = await this.client!.chat(this.messages, this.options);
@@ -362,6 +373,10 @@ export class Agent {
     }
     const { id, name, arguments: args } = toolCall;
     const argsStr = JSON.stringify(args);
+    // Si l'outil a un side-effect, marquer le bloc DYNAMIC pour refresh
+    if (this.isSideEffectTool(name)) {
+      this.dynamicContextDirty = true;
+    }
     // Record the current tool call in rich history silently
     this.richToolCallHistory.push({
       name,
@@ -417,6 +432,17 @@ export class Agent {
     });
   }
 
+  /** Outils avec side-effect qui modifient le contexte (git, projet, track) */
+  private isSideEffectTool(name: string): boolean {
+    return [
+      'write_file', 'append_file', 'replace_in_file', 'batch_replace',
+      'run_command', 'git_commit',
+      'conductor_create_track', 'conductor_update_plan',
+      'conductor_archive_track', 'conductor_validate_plan',
+      'project_summary',
+    ].includes(name);
+  }
+
   private isDangerousTool(name: string): boolean {
     return name === 'run_command' || name === 'write_file' || name === 'delete_file';
   }
@@ -465,8 +491,13 @@ export class Agent {
   }
 
   clearHistory(): void {
-    const systemPrompt = this.messages.find(m => m.role === 'system');
-    this.messages = systemPrompt ? [systemPrompt] : [];
+    // Conserver le bloc STATIC (messages[0]), dropper le DYNAMIC et le reste
+    const staticPrompt = this.messages.length > 0 && this.messages[0].role === 'system'
+      ? this.messages[0]
+      : null;
+    this.messages = staticPrompt ? [staticPrompt] : [];
+    // Le bloc DYNAMIC sera regenere au prochain run()
+    this.dynamicContextDirty = true;
   }
 
   setModel(model: string): void { this.options.model = model; }

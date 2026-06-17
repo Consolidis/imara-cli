@@ -13,7 +13,9 @@ vi.mock('../ui/confirm', () => ({
 }));
 vi.mock('../context/context-builder', () => ({
   ContextBuilder: {
-    buildSystemPrompt: vi.fn().mockResolvedValue('Mocked System Prompt')
+    buildSystemPrompt: vi.fn().mockResolvedValue('Mocked System Prompt'),
+    buildStaticSystemPrompt: vi.fn(() => 'STATIC: Mocked System Rules'),
+    buildDynamicContext: vi.fn().mockResolvedValue('DYNAMIC: Mocked Project Context'),
   }
 }));
 vi.mock('ora', () => ({

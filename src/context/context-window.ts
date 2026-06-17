@@ -45,7 +45,6 @@ export class ContextWindow {
     const perRole = this.countByRole(messages);
     const total = perRole.system + perRole.user + perRole.assistant + perRole.tool;
     const state = this.determineState(total);
-
     return {
       totalTokens: total,
       maxTokens: this.maxTokens,
@@ -62,7 +61,6 @@ export class ContextWindow {
   check(messages: Message[]): { state: ContextWindowState; action: 'none' | 'warn' | 'compact' | 'truncate' } {
     const total = this.getTotalTokens(messages);
     const percentage = (total / this.maxTokens) * 100;
-
     if (total >= this.compactTokens) {
       return { state: 'critical', action: 'compact' };
     }
@@ -73,28 +71,27 @@ export class ContextWindow {
   }
 
   compact(messages: Message[], sessionId?: string): Message[] {
-    const minMessages = 1 + this.preserveTailMessages;
-    if (messages.length <= minMessages) {
+    // messages[0] = STATIC system prompt (a preserver tel quel)
+    // messages[1] = DYNAMIC context (a preserver tel quel)
+    // messages[2..] = conversation (user, assistant, tool)
+    const staticMsg = messages.length > 0 && messages[0].role === 'system' ? messages[0] : null;
+    const dynamicMsg = messages.length > 1 && messages[1].role === 'system' ? messages[1] : null;
+    const conversationMessages = messages.slice(2);
+    const convCount = conversationMessages.length;
+
+    if (convCount <= this.preserveTailMessages) {
       return this.truncateToFit(messages);
     }
 
-    const systemMessage = messages.find(m => m.role === 'system');
-    if (!systemMessage) {
-      return this.truncateToFit(messages);
-    }
+    const tail = conversationMessages.slice(-this.preserveTailMessages);
+    const middleMessages = conversationMessages.slice(0, -this.preserveTailMessages);
 
-    // Conserver system + N derniers messages (demandes, réponses, résultats d'outils)
-    const tail = messages.slice(-this.preserveTailMessages);
-    const middleMessages = messages.filter(
-      m => m.role !== 'system' && !tail.includes(m)
-    );
+    const base: Message[] = [];
+    if (staticMsg) base.push(staticMsg);
+    if (dynamicMsg) base.push(dynamicMsg);
 
-    let compacted = messages;
     if (middleMessages.length > 0) {
-      // Resumer les messages intermediaires
       const summary = this.generateSummary(middleMessages);
-
-      // Sauvegarde SQLite du résumé de contexte
       if (sessionId) {
         const provider = getStorage();
         if (provider) {
@@ -109,61 +106,56 @@ export class ContextWindow {
               version: nextVersion
             });
           } catch {
-            // Fallback silencieux en cas d'erreur SQLite
+            // Fallback silencieux
           }
         }
       }
-
       const summaryMessage: Message = {
         role: 'system',
         content: `RESUME DES ECHANGES PRECEDENTS : ${summary}`
       };
-
-      compacted = [systemMessage, summaryMessage, ...tail];
+      base.push(summaryMessage);
     }
 
-    // Si toujours au-dessus du seuil apres resume, tronquer les anciens
-    if (this.getTotalTokens(compacted) >= this.compactTokens) {
-      compacted = [systemMessage, ...tail];
+    base.push(...tail);
+
+    if (staticMsg && dynamicMsg && this.getTotalTokens(base) >= this.compactTokens) {
+      const fallback: Message[] = [staticMsg, dynamicMsg, ...tail];
+      return this.truncateToFit(fallback);
     }
 
-    // Troncature dure auto-correctrice pour s'assurer de ne jamais dépasser maxTokens
-    return this.truncateToFit(compacted);
+    return this.truncateToFit(base);
   }
 
   private truncateToFit(messages: Message[]): Message[] {
     let total = this.getTotalTokens(messages);
     if (total <= this.maxTokens) return messages;
 
-    // Clone pour éviter les mutations directes
     const cloned = messages.map(m => ({ ...m }));
-
     while (total > this.maxTokens) {
       let largestIndex = -1;
       let largestLength = 0;
-
       for (let i = 0; i < cloned.length; i++) {
         const msg = cloned[i];
+        // Preserver les 2 premiers system messages (static + dynamic)
+        if (msg.role === 'system' && i < 2) continue;
         if (msg.role === 'system') continue;
         if (msg.content && msg.content.length > largestLength) {
           largestLength = msg.content.length;
           largestIndex = i;
         }
       }
-
       if (largestIndex === -1 || largestLength <= 60) {
         break;
       }
-
       const msg = cloned[largestIndex];
       const truncationSuffix = '\n... [CONTENU TRONQUÉ POUR CONTEXTE LIMITE] ...\n';
       const cleanContent = msg.content.includes(truncationSuffix)
         ? msg.content.replace(truncationSuffix, '')
         : msg.content;
-      
+
       const originalLen = cleanContent.length;
       const targetLen = Math.floor(originalLen * 0.5);
-
       if (targetLen < 10) {
         msg.content = '...' + truncationSuffix;
       } else if (msg.role === 'tool') {
@@ -172,10 +164,8 @@ export class ContextWindow {
         const half = Math.floor(targetLen / 2);
         msg.content = cleanContent.slice(0, half) + truncationSuffix + cleanContent.slice(-half);
       }
-
       total = this.getTotalTokens(cloned);
     }
-
     return cloned;
   }
 
