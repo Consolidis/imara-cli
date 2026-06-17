@@ -57,7 +57,7 @@ describe('Onboarding Wizard & Integration', () => {
     // Mock prompt flow:
     // First prompt is API key -> masked
     askMaskedMock.mockResolvedValueOnce('super-valid-api-key');
-    // Second prompt is model selection -> "1" (zuri)
+    // Second prompt is model selection -> "1" (flash)
     askMock.mockResolvedValueOnce('1');
     // Third prompt is workspace confirmation -> Enter
     askMock.mockResolvedValueOnce('');
@@ -71,7 +71,7 @@ describe('Onboarding Wizard & Integration', () => {
 
     // Verify config was persisted
     const cfg = ConfigManager.get();
-    expect(cfg.defaultModel).toBe('zuri');
+    expect(cfg.defaultModel).toBe('flash');
     expect(cfg.onboardingDone).toBe(false);
   });
 
@@ -84,7 +84,6 @@ describe('Onboarding Wizard & Integration', () => {
 
     // Verify 3 slide transitions were prompted
     expect(askMock).toHaveBeenCalledTimes(3);
-
     // Verify onboardingDone was saved
     expect(ConfigManager.get().onboardingDone).toBe(true);
   });
@@ -113,7 +112,7 @@ describe('Onboarding Wizard & Integration', () => {
 
     // We use the globally mocked readline which exits immediately
     const { chatCommand } = await import('../cli/commands/chat.command');
-    
+
     try {
       await chatCommand({});
     } catch (e: any) {
@@ -158,6 +157,7 @@ describe('Onboarding Wizard & Integration', () => {
       write: vi.fn(),
       question: vi.fn(),
     } as any;
+
     vi.spyOn(readline, 'createInterface').mockReturnValue(rlInstance);
 
     const { chatCommand } = await import('../cli/commands/chat.command');

@@ -19,7 +19,7 @@ const DEFAULTS: ConfigSchema = {
   apiKey: '',
   // baseUrl: 'https://api.imara.consolidis.com',
   baseUrl: 'http://localhost:3001', 
-  model: 'imara-zuri',
+  model: 'imara-flash',
   temperature: 0.7,
   maxTokens: 216384, 
   contextWindow: 232768,

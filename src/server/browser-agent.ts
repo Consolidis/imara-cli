@@ -66,7 +66,7 @@ export class BrowserAgentBridge {
     const stored = socketModelMap.get(socketId);
     if (stored) return stored;
     const config = ConfigManager.get();
-    return config.defaultModel || 'zuri';
+    return config.defaultModel || 'flash';
   }
 
   static async handleChatMessage(
@@ -248,7 +248,7 @@ export class BrowserAgentBridge {
       }
     }
     return {
-      model: 'zuri',
+      model: 'flash',
       tokens: 0,
       costFcfa: 0,
       trackId: null,

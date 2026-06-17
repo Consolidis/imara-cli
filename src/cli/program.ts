@@ -44,7 +44,7 @@ program
       const globalOpts = program.opts();
       const mergedOptions = {
         ...globalOpts,
-        model: options.model || globalOpts.model || config.defaultModel || 'zuri',
+        model: options.model || globalOpts.model || config.defaultModel || 'flash',
         ...options
       };
       await runCommand(prompt, mergedOptions);
@@ -63,7 +63,7 @@ program
     const config = ConfigManager.get();
     const mergedOptions = {
       ...globalOpts,
-      model: options.model || globalOpts.model || config.defaultModel || 'zuri',
+      model: options.model || globalOpts.model || config.defaultModel || 'flash',
       ...options
     };
     await chatCommand(mergedOptions);

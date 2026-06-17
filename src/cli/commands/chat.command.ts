@@ -116,7 +116,7 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
   const user = await requireAuth();
   const projectInfo = await ProjectAnalyzer.analyze();
   
-  let resolvedModel = options.model || ConfigManager.get().defaultModel || 'zuri';
+  let resolvedModel = options.model || ConfigManager.get().defaultModel || 'flash';
 
   if (!isNativeModel(resolvedModel)) {
     const ok = await verifyAndPromptExternalKey(resolvedModel);
@@ -549,9 +549,9 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         
         if (!model) {
           console.log(chalk.hex(theme.primary).bold('\n  🤖 MODÈLES DISPONIBLES :'));
+          console.log(`    • ${chalk.hex(theme.accent).bold('flash')}    : Modèle ultra-rapide - Économique et instantané (Recommandé).`);
+          console.log(`    • ${chalk.hex(theme.accent).bold('standard')} : Modèle standard hybride - zuri planif. + flash exécution.`);
           console.log(`    • ${chalk.hex(theme.accent).bold('zuri')}     : Modèle d'ingénierie senior - Très précis, idéal pour le code.`);
-          console.log(`    • ${chalk.hex(theme.accent).bold('standard')} : Modèle standard équilibré - Rapide et intelligent.`);
-          console.log(`    • ${chalk.hex(theme.accent).bold('flash')}    : Modèle ultra-rapide - Économique et instantané.`);
           console.log(`    • ${chalk.hex(theme.muted)('Autre')}    : N'importe quel modèle personnalisé (ex: gpt-4o, claude-3.5-sonnet).`);
           console.log(chalk.hex(theme.muted)('              (Tarif forfaitaire fixe de 5.00 FCFA par requête)'));
           console.log(chalk.hex(theme.primary)(`\n  👉 Tapez ${chalk.bold('/model <nom>')} pour activer un modèle (ex: ${chalk.bold('/model flash')})\n`));

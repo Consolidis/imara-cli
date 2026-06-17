@@ -22,10 +22,9 @@ export async function runSetupWizard(): Promise<void> {
   let validated = false;
   let userName = '';
   let userEmail = '';
-  
+
   // Try to load key from existing keychain if any
   const existingKey = await Keychain.get();
-
   while (!validated) {
     if (existingKey && !apiKey) {
       console.log(chalk.yellow(`🔑 Clé API sécurisée existante détectée.`));
@@ -34,7 +33,6 @@ export async function runSetupWizard(): Promise<void> {
         apiKey = existingKey;
       }
     }
-
     if (!apiKey) {
       console.log(chalk.gray('\nRécupérez votre clé API sur https://imara.consolidis.com'));
       apiKey = await askQuestionMasked(chalk.cyan('› Collez votre Clé API d\'IMARA (saisie invisible) : '));
@@ -49,15 +47,15 @@ export async function runSetupWizard(): Promise<void> {
     try {
       const client = new ImaraClient(apiKey);
       const userInfo = await client.validateApiKey();
-      
+
       // Clear the loading line
       readline.clearLine(process.stdout, 0);
       readline.cursorTo(process.stdout, 0);
-      
+
       console.log(chalk.green(`🟢 Clé API validée avec succès !`));
       console.log(chalk.gray(`   Utilisateur : ${userInfo.name} (${userInfo.email})`));
       console.log(chalk.gray(`   Solde       : ${userInfo.walletBalance} FCFA`));
-      
+
       // Save valid key to system keychain + config fallback
       await Keychain.save(apiKey);
       ConfigManager.set({ apiKey });
@@ -68,7 +66,6 @@ export async function runSetupWizard(): Promise<void> {
       // Clear the loading line
       readline.clearLine(process.stdout, 0);
       readline.cursorTo(process.stdout, 0);
-
       const msg = error instanceof Error ? error.message : String(error);
       console.log(chalk.red(`🔴 Validation échouée : Clé API incorrecte ou expirée.\n   (${msg})`));
       apiKey = ''; // Reset for retry
@@ -77,28 +74,28 @@ export async function runSetupWizard(): Promise<void> {
 
   // 2. MODEL SELECTION
   console.log(chalk.cyan.bold('\n--- Choix du Modèle par Défaut ---'));
-  console.log(chalk.gray('1. imara-zuri  - Expert en code et refactoring (Recommandé)'));
-  console.log(chalk.gray('2. imara       - Modèle standard pour tâches générales'));
-  console.log(chalk.gray('3. imara-flash - Modèle rapide et ultra-économique'));
-  
+  console.log(chalk.gray('1. imara-flash - Modèle rapide et ultra-économique (Recommandé)'));
+  console.log(chalk.gray('2. imara       - Modèle standard hybride (zuri planif. + flash exéc.)'));
+  console.log(chalk.gray('3. imara-zuri  - Expert en code et refactoring'));
+
   let modelChoice = '';
-  let defaultModel = 'zuri';
+  let defaultModel = 'flash';
   while (!modelChoice) {
     const ans = await askQuestion(chalk.cyan('\n› Sélectionnez le modèle (1-3, défaut: 1) : '));
     if (!ans || ans === '1') {
-      defaultModel = 'zuri';
-      modelChoice = 'zuri';
+      defaultModel = 'flash';
+      modelChoice = 'flash';
     } else if (ans === '2') {
       defaultModel = 'standard';
       modelChoice = 'standard';
     } else if (ans === '3') {
-      defaultModel = 'flash';
-      modelChoice = 'flash';
+      defaultModel = 'zuri';
+      modelChoice = 'zuri';
     } else {
       console.log(chalk.red('⚠ Choix invalide. Veuillez entrer 1, 2 ou 3.'));
     }
   }
-  console.log(chalk.green(`🟢 Modèle configuré : imara-${defaultModel}`));
+  console.log(chalk.green(`🟢 Modèle configuré : ${defaultModel === 'standard' ? 'imara (hybride zuri+flash)' : `imara-${defaultModel}`}`));
 
   // 3. WORKSPACE ROOT ISOLATION
   const cwd = process.cwd();

@@ -8,6 +8,7 @@ import { uiEvents } from '../ui/ui-events';
 import { confirmDangerousTool } from '../ui/confirm';
 import * as path from 'path';
 import { TrackLogger } from '../context/conductor/track-logger';
+import { TrackManager } from '../context/conductor/track-manager';
 import { ContextWindow } from '../context/context-window';
 import { ConfigManager } from '../config';
 import { getAutoConfirm } from '../utils/env';
@@ -65,7 +66,7 @@ export class Agent {
   constructor(options: AgentOptions = {}) {
     const cfg = ConfigManager.get();
     this.options = {
-      model: options.model ?? cfg.defaultModel ?? 'zuri',
+      model: options.model ?? cfg.defaultModel ?? 'flash',
       yes: options.yes ?? false,
       execute: options.execute ?? true,
       maxTokens: options.maxTokens ?? cfg.maxTokens,
@@ -194,7 +195,9 @@ export class Agent {
           this.dynamicContextDirty = false;
         }
         startThinkingSpinner();
-        const response = await this.client!.chat(this.messages, this.options);
+        const effectiveModel = this.resolveEffectiveModel();
+        const chatOptions = { ...this.options, model: effectiveModel };
+        const response = await this.client!.chat(this.messages, chatOptions);
         stopThinkingSpinner();
         this.totalTokensUsed += response.usage.totalTokens;
         this.totalCostFcfa += response.usage.costFcfa;
@@ -502,6 +505,20 @@ export class Agent {
 
   setModel(model: string): void { this.options.model = model; }
   getModel(): string { return this.options.model; }
+
+  /**
+   * Resout le modele effectif a envoyer a l'API.
+   * Pour 'standard' : hybride zuri (planification) / flash (execution).
+   */
+  resolveEffectiveModel(): string {
+    const model = this.options.model;
+    if (model !== 'standard') return model;
+    const active = TrackManager.getActive();
+    if (active && active.validated) {
+      return 'flash';
+    }
+    return 'zuri';
+  }
   getMessages(): Message[] { return [...this.messages]; }
   setMessages(messages: Message[]): void { this.messages = [...messages]; }
 }

@@ -254,11 +254,12 @@ export class ImaraClient {
   }
 
   private mapModel(modelName?: string): string {
-    if (!modelName) return 'imara-zuri';
+    if (!modelName) return 'imara-flash';
     const map: Record<string, string> = {
       'flash': 'imara-flash',
       'standard': 'imara',
-      'zuri': 'imara-zuri'
+      'zuri': 'imara-zuri',
+      'pro': 'imara-pro',
     };
     return map[modelName] || modelName;
   }

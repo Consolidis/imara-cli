@@ -19,7 +19,7 @@ describe('ConfigManager', () => {
 
   it('should return default config when no file exists', () => {
     const cfg = ConfigManager.get();
-    expect(cfg.defaultModel).toBe('zuri');
+    expect(cfg.defaultModel).toBe('flash');
     expect(cfg.language).toBe('fr');
   });
 
@@ -48,7 +48,7 @@ describe('ConfigManager', () => {
     ConfigManager.set({ defaultModel: 'custom' });
     ConfigManager.reset();
     (ConfigManager as any)._cache = null;
-    expect(ConfigManager.get().defaultModel).toBe('zuri');
+    expect(ConfigManager.get().defaultModel).toBe('flash');
   });
 
   it('should detect first launch correctly', () => {
