@@ -3,7 +3,6 @@ import * as path from 'path';
 import { isInsideCwd, isProtectedFile } from '../../utils/file-utils';
 import { ToolDefinition } from '../agent.types';
 
-// Types internes pour le rapport d'investigation
 interface InvestigationReport {
   header: string;
   toc: string;
@@ -80,7 +79,6 @@ export class InvestigateFileTool {
     const lineCount = lines.length;
     const sizeKB = (stats.size / 1024).toFixed(2);
 
-    // Detection du type de line ending
     const crlfCount = (content.match(/\r\n/g) || []).length;
     const lfCount = (content.match(/[^\r]\n/g) || []).length + (content.startsWith('\n') ? 1 : 0);
     let lineEndingType = 'LF';
@@ -94,33 +92,25 @@ export class InvestigateFileTool {
     const maxLines = args.max_lines || 200;
     const strategy = args.strategy || 'auto';
 
-    // Barriere > 5000 lignes
     if (lineCount > 5000) {
       return this.buildRefusalReport(args.path, lineCount, sizeKB, lineEndingType, ext);
     }
 
-    // Determination de la strategie effective selon la taille
-    const effectiveStrategy = this.resolveStrategy(strategy, lineCount);
-
-    // Construction du rapport
+    const hasQueryOrSections = !!(args.query || (args.sections && args.sections.length > 0));
+    const effectiveStrategy = this.resolveStrategy(strategy, lineCount, hasQueryOrSections);
     const report = await this.buildReport(args.path, fullPath, lines, lineCount, sizeKB, lineEndingType, ext, effectiveStrategy, args.query, args.sections, maxLines);
     return this.formatReport(report);
   }
 
-  /**
-   * Resout la strategie effective en fonction de la taille du fichier et du choix utilisateur.
-   */
-  private static resolveStrategy(strategy: Strategy, lineCount: number): Strategy {
+  private static resolveStrategy(strategy: Strategy, lineCount: number, hasQueryOrSections?: boolean): Strategy {
     if (strategy !== 'auto') return strategy;
     if (lineCount < 100) return 'deep';
     if (lineCount <= 300) return 'overview';
-    if (lineCount <= 1000) return 'targeted';
+    // > 300 lignes : targeted si query/sections fournis, sinon overview (outline pur)
+    if (hasQueryOrSections) return 'targeted';
     return 'overview';
   }
 
-  /**
-   * Construit un rapport de refus pour les fichiers > 5000 lignes.
-   */
   private static buildRefusalReport(filePath: string, lineCount: number, sizeKB: string, lineEnding: string, ext: string): string {
     let report = '=== RAPPORT D\'INVESTIGATION (REFUSE) ===\n';
     report += `Fichier : ${filePath}\n`;
@@ -135,9 +125,6 @@ export class InvestigateFileTool {
     return report;
   }
 
-  /**
-   * Construit le rapport d'investigation complet.
-   */
   private static async buildReport(
     filePath: string,
     fullPath: string,
@@ -151,50 +138,46 @@ export class InvestigateFileTool {
     sections?: string[],
     maxLines?: number
   ): Promise<InvestigationReport> {
-    // HEADER: metadonnees
     const header = this.buildHeader(filePath, lineCount, sizeKB, lineEnding, ext, strategy);
-
-    // TOC & CONTENT selon la strategie
     let toc = '';
     let content = '';
     let notes = '';
 
     if (strategy === 'deep' && lineCount <= 100) {
-      // Lecture complete : delegue a read_file
       content = lines.join('\n');
       toc = '(Fichier court : lecture complete)';
       notes = `Fichier entier lu (${lineCount} lignes).`;
+
     } else if (strategy === 'overview' || (strategy === 'targeted' && !query && !sections)) {
-      // Vue d'ensemble : outline + code_map
-      const codeMap = await this.getCodeMap(fullPath, lines);
+      // Fichiers <= 300 : resume leger avec les 5 premieres lignes de chaque bloc
+      // Fichiers > 300 : outline uniquement (signatures seules)
+      const showBody = lineCount <= 300 ? 5 : 0;
+      const codeMap = this.getCodeMap(lines, showBody);
       toc = codeMap.toc;
       content = codeMap.summary;
       if (lineCount > 300) {
-        notes = `Fichier de ${lineCount} lignes. Utilisez query=... ou sections=[...] pour cibler le contenu.`;
+        notes = `Fichier de ${lineCount} lignes (outline seul). Utilisez query=... ou sections=[...] pour lire le contenu.`;
       } else {
         notes = `Vue d'ensemble : ${codeMap.functionCount} bloc(s) identifie(s).`;
       }
+
     } else if (strategy === 'targeted' && (query || sections)) {
-      // Ciblage par query et/ou sections
-      const codeMap = await this.getCodeMap(fullPath, lines);
+      const codeMap = this.getCodeMap(lines, 0);
       toc = codeMap.toc;
       let targetedContent = '';
-
       if (query) {
         targetedContent += await this.searchAndRead(lines, query, fullPath, maxLines || 200);
       }
-
       if (sections && sections.length > 0) {
         const sectionContent = await this.readSections(lines, sections, fullPath, maxLines || 200);
         if (targetedContent) targetedContent += '\n\n';
         targetedContent += sectionContent;
       }
-
       content = targetedContent || '(Aucun contenu cible trouve)';
       notes = `Recherche ciblee${query ? ' (query: "' + query + '")' : ''}${sections ? ' (sections: ' + sections.join(', ') + ')' : ''}.`;
+
     } else if (strategy === 'deep') {
-      // Lecture approfondie : jusqu'a maxLines lignes
-      const codeMap = await this.getCodeMap(fullPath, lines);
+      const codeMap = this.getCodeMap(lines, 0);
       toc = codeMap.toc;
       const linesToRead = Math.min(lineCount, maxLines || 200);
       content = lines.slice(0, linesToRead).join('\n');
@@ -208,9 +191,6 @@ export class InvestigateFileTool {
     return { header, toc, content, notes };
   }
 
-  /**
-   * Construit le header du rapport.
-   */
   private static buildHeader(filePath: string, lineCount: number, sizeKB: string, lineEnding: string, ext: string, strategy: string): string {
     let h = '=== RAPPORT D\'INVESTIGATION ===\n';
     h += `Fichier : ${filePath}\n`;
@@ -222,9 +202,6 @@ export class InvestigateFileTool {
     return h;
   }
 
-  /**
-   * Formate le rapport final.
-   */
   private static formatReport(report: InvestigationReport): string {
     let output = '';
     output += report.header;
@@ -238,13 +215,13 @@ export class InvestigateFileTool {
   }
 
   /**
-   * Analyse la structure du fichier et retourne un TOC + un resume.
+   * Analyse la structure du fichier.
+   * @param showBodyLines nombre de lignes du corps a afficher apres chaque signature (0 = outline pur)
    */
-  private static getCodeMap(fullPath: string, lines: string[]): { toc: string; summary: string; functionCount: number } {
+  private static getCodeMap(lines: string[], showBodyLines: number): { toc: string; summary: string; functionCount: number } {
     const tocLines: string[] = [];
     let functionCount = 0;
 
-    // Patterns pour detecter les declarations
     const patterns = [
       /^\s*(export\s+)?(class|interface|type|enum|trait|struct)\s+(\w+)/,
       /^\s*(export\s+)?(async\s+)?function\s+(\w+)\s*\(.*\)/,
@@ -260,16 +237,15 @@ export class InvestigateFileTool {
         const m = line.match(p);
         if (m) {
           functionCount++;
-          // Extraire le nom significatif pour affichage
-          const name = m[3] || m[1] || m[0].trim();
           tocLines.push(`  L${i + 1}: ${line.trim().substring(0, 100)}`);
           break;
         }
       }
     }
 
-    // Generer un resume : import + signatures
     const summaryLines: string[] = [];
+
+    // Imports
     const imports = lines.filter(l => l.trim().startsWith('import '));
     if (imports.length > 0) {
       summaryLines.push('// Imports:');
@@ -280,19 +256,18 @@ export class InvestigateFileTool {
       summaryLines.push('');
     }
 
-    // Afficher les signatures des fonctions/classes (5 premieres lignes de chaque bloc)
+    // Signatures (+ corps si showBodyLines > 0)
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const isDeclaration = patterns.some(p => p.test(line));
       if (isDeclaration) {
-        // Signature + 5 premieres lignes du corps
         summaryLines.push(line);
-        for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+        for (let j = i + 1; j < Math.min(i + 1 + showBodyLines, lines.length); j++) {
           const nextLine = lines[j];
           if (nextLine.trim() === '' || nextLine.trim().startsWith('import ')) break;
           summaryLines.push(nextLine);
         }
-        summaryLines.push('');
+        if (showBodyLines > 0) summaryLines.push('');
       }
     }
 
@@ -307,9 +282,6 @@ export class InvestigateFileTool {
     };
   }
 
-  /**
-   * Recherche un terme dans le fichier et lit les plages pertinentes.
-   */
   private static async searchAndRead(lines: string[], query: string, fullPath: string, maxLines: number): Promise<string> {
     const matches: { line: number; text: string }[] = [];
     const q = query.toLowerCase();
@@ -324,7 +296,6 @@ export class InvestigateFileTool {
       return `[Recherche "${query}": aucune correspondance]`;
     }
 
-    // Lire les plages autour des matchs (contexte de 5 lignes avant/apres)
     const readRanges: { start: number; end: number }[] = [];
     const contextLines = 5;
 
@@ -334,7 +305,6 @@ export class InvestigateFileTool {
       const start = Math.max(0, match.line - 1 - contextLines);
       const end = Math.min(lines.length, match.line - 1 + contextLines);
 
-      // Fusionner les plages qui se chevauchent
       const lastRange = readRanges[readRanges.length - 1];
       if (lastRange && start <= lastRange.end + 1) {
         lastRange.end = end;
@@ -343,7 +313,6 @@ export class InvestigateFileTool {
       }
     }
 
-    // Limiter le nombre total de lignes lues
     let totalLinesRead = 0;
     for (const range of readRanges) {
       const rangeSize = range.end - range.start;
@@ -374,9 +343,6 @@ export class InvestigateFileTool {
     return result;
   }
 
-  /**
-   * Lit des sections specifiques du fichier (par nom de fonction/classe).
-   */
   private static async readSections(lines: string[], sections: string[], fullPath: string, maxLines: number): Promise<string> {
     const results: string[] = [];
     let remainingLines = maxLines;
@@ -384,14 +350,12 @@ export class InvestigateFileTool {
     for (const sectionName of sections) {
       if (remainingLines <= 0) break;
 
-      // Chercher la declaration de la section
       let foundLine = -1;
       const lowerName = sectionName.toLowerCase();
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].toLowerCase();
         if (line.includes(lowerName)) {
-          // Verifier que c'est bien une declaration (class, function, interface, etc.)
           const pattern = new RegExp(
             `(class|interface|type|enum|function|const|let|var|def)\\s+${sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`
           );
@@ -407,12 +371,10 @@ export class InvestigateFileTool {
         continue;
       }
 
-      // Trouver la fin du bloc en comptant les accolades ou l'indentation
       const isPythonLike = lines[foundLine].trim().endsWith(':');
       let endLine = foundLine + 1;
 
       if (isPythonLike) {
-        // Indentation-based (Python)
         const baseIndent = lines[foundLine].match(/^\s*/)?.[0].length || 0;
         for (let i = foundLine + 1; i < lines.length; i++) {
           if (!lines[i].trim()) continue;
@@ -424,7 +386,6 @@ export class InvestigateFileTool {
           endLine = i + 1;
         }
       } else {
-        // Brace-based (JS/TS/C#/Java)
         let braceCount = 0;
         let started = false;
         for (let i = foundLine; i < lines.length; i++) {
@@ -443,7 +404,6 @@ export class InvestigateFileTool {
         }
       }
 
-      // Lire la section
       const sectionLines: string[] = [];
       for (let i = foundLine; i < endLine && i < lines.length; i++) {
         if (sectionLines.length >= remainingLines) {
