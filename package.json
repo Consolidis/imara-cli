@@ -49,7 +49,6 @@
     "commander": "^14.0.3",
     "diff": "^9.0.0",
     "dotenv": "^17.4.2",
-    "duckduckgo-search": "^1.0.7",
     "enquirer": "^2.4.1",
     "express": "^4.22.2",
     "fast-glob": "^3.3.3",

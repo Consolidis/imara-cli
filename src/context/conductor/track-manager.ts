@@ -119,7 +119,11 @@ export class TrackManager {
       existingTracks.push(...fs.readdirSync(archiveDir)
         .filter(d => fs.statSync(path.join(archiveDir, d)).isDirectory()));
     }
-    const nextNum  = String(existingTracks.length + 1).padStart(3, '0');
+    const existingNums = existingTracks
+      .map(d => parseInt(d.split('-')[0], 10))
+      .filter(n => !isNaN(n));
+    const maxNum = existingNums.length > 0 ? Math.max(...existingNums) : 0;
+    const nextNum = String(maxNum + 1).padStart(3, '0');
     const slug     = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const id       = `${nextNum}-${slug}`;
     const dir      = path.join(tracksDir, id);

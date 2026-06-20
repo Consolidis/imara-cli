@@ -139,7 +139,9 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
       output: process.stdout,
       prompt: chalk.hex(theme.muted)('  ❯ ')
     });
-
+    // Activer le mode raw pour capter les touches (Esc, etc.)
+    readline.emitKeypressEvents(process.stdin);
+    try { process.stdin.setRawMode(true); } catch {}
     const agent = new Agent({
       ...options,
       model: resolvedModel
@@ -814,6 +816,8 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
     }
 
     rl.on('close', () => {
+      // Restaurer le mode raw du terminal
+      try { process.stdin.setRawMode(false); } catch {}
       process.stdin.removeListener('keypress', keypressHandler);
       clearStatusBar();
       const stats = agent.getSessionStats();

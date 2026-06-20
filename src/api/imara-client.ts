@@ -60,14 +60,12 @@ export class ImaraClient {
           retries: 0,
           externalSignal: this.abortController.signal
         });
-
         if (!response.ok) {
           if (response.status === 401) {
             throw new Error('Clé API invalide ou expirée (code 401). Relancez `imara login`.');
           }
           throw new Error(`Erreur validation API (code ${response.status})`);
         }
-
         return await response.json() as UserInfo;
       }, {
         constant: true,
@@ -87,7 +85,6 @@ export class ImaraClient {
 
   async chat(messages: Message[], options: AgentOptions): Promise<AgentResponse> {
     const cacheKey = computeContextHash(messages);
-
     try {
       const data = await this.circuitBreaker.execute(async () => {
         return executeWithRetry(async () => {
@@ -100,10 +97,20 @@ export class ImaraClient {
             maxTokens: options.maxTokens,
             system: options.model === 'zuri' ? 'Tu es Imara Zuri, un expert en code.' : undefined,
           };
-
           if (getDebugMode()) {
             console.error(`\x1b[36m[IMARA_DEBUG] POST /v1/agent/chat\x1b[0m`);
             console.error(`\x1b[36m[IMARA_DEBUG] Payload: ${JSON.stringify(payload, null, 2)}\x1b[0m`);
+          }
+          const payloadStr = JSON.stringify(payload);
+          const payloadSizeKB = Math.round(payloadStr.length / 1024);
+          // Seuils progressifs : warning a 600 KB, blocage a 1 MB
+          const WARN_PAYLOAD_KB = 600;
+          const MAX_PAYLOAD_KB = 1000;
+          if (payloadSizeKB > WARN_PAYLOAD_KB && payloadSizeKB <= MAX_PAYLOAD_KB) {
+            process.stderr.write(`\x1b[33m[IMARA] Attention : payload volumineux (${payloadSizeKB} KB). La qualite des reponses pourrait etre degradee. Tapez /clear pour alleger la conversation.\x1b[0m\n`);
+          }
+          if (payloadSizeKB > MAX_PAYLOAD_KB) {
+            throw new Error(`Le payload de la requete est trop volumineux (${payloadSizeKB} KB > ${MAX_PAYLOAD_KB} KB). Tapez /clear pour alleger la conversation.`);
           }
 
           const headers: Record<string, string> = {
@@ -111,7 +118,6 @@ export class ImaraClient {
             'Content-Type': 'application/json',
             'X-Model': modelId,
           };
-
           const isNative = isNativeModel(options.model);
           if (!isNative) {
             const externalKey = await Keychain.getExternalKey(options.model || '');
@@ -126,7 +132,7 @@ export class ImaraClient {
           const response = await fetchWithTimeout(`${this.baseUrl}/v1/agent/chat`, {
             method: 'POST',
             headers,
-            body: JSON.stringify(payload),
+            body: payloadStr,
             timeoutMs: isNative ? 30000 : 60000,
             retries: 0,
             externalSignal: this.abortController.signal
@@ -138,9 +144,7 @@ export class ImaraClient {
               try {
                 const errBody = await response.json() as Record<string, unknown>;
                 const raw = String(errBody?.message || errBody?.error || '');
-                if (raw.toLowerCase().includes('context') || raw.toLowerCase().includes('token') || raw.toLowerCase().includes('length')) {
-                  errorMsg = 'Le contexte de la conversation est trop lourd pour le modèle. Tapez /clear pour vider la mémoire.';
-                } else if (raw.toLowerCase().includes('wallet') || raw.toLowerCase().includes('balance') || raw.toLowerCase().includes('insufficient')) {
+                if (raw.toLowerCase().includes('wallet') || raw.toLowerCase().includes('balance') || raw.toLowerCase().includes('insufficient')) {
                   errorMsg = 'Solde insuffisant dans votre wallet. Veuillez recharger vos crédits sur https://imara.consolidis.com pour utiliser ce modèle.';
                 } else if (!isTechnicalError(raw)) {
                   errorMsg = raw;
@@ -170,7 +174,6 @@ export class ImaraClient {
             if (response.status >= 500) {
               throw new Error(`Le service Imara est temporairement indisponible (code ${response.status}). Réessayez dans un instant.`);
             }
-
             let errorMsg = `Erreur inattendue (code ${response.status}). Réessayez ou contactez le support.`;
             try {
               const errBody = await response.json() as Record<string, unknown>;
@@ -179,7 +182,6 @@ export class ImaraClient {
                 errorMsg = raw || errorMsg;
               }
             } catch (_e) { /* ignore parse errors */ }
-
             throw new Error(errorMsg);
           }
 
@@ -236,7 +238,6 @@ export class ImaraClient {
           }
         });
       });
-
       // Save successful response to cache
       this.cache.set(cacheKey, data);
       return data;

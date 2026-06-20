@@ -69,8 +69,8 @@ export class Agent {
       model: options.model ?? cfg.defaultModel ?? 'flash',
       yes: options.yes ?? false,
       execute: options.execute ?? true,
-      maxTokens: options.maxTokens ?? cfg.maxTokens,
-      contextDepth: options.contextDepth ?? cfg.contextDepth,
+      maxTokens: options.maxTokens != null ? Number(options.maxTokens) : cfg.maxTokens,
+      contextDepth: options.contextDepth != null ? Number(options.contextDepth) : cfg.contextDepth,
     };
     if (getAutoConfirm()) this.options.yes = true;
     this.contextWindow = new ContextWindow({

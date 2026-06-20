@@ -12,6 +12,7 @@ vi.mock('readline', () => ({
   }),
   clearLine: vi.fn(),
   cursorTo: vi.fn(),
+  emitKeypressEvents: vi.fn(),
 }));
 
 import * as wizardModule from '../cli/wizard';
@@ -30,6 +31,10 @@ describe('Onboarding Wizard & Integration', () => {
     if (fs.existsSync(TEST_CONFIG)) fs.unlinkSync(TEST_CONFIG);
     (ConfigManager as any)._cache = null;
     vi.restoreAllMocks();
+    // Mock stdin methods for the keypress handler (added Track 021)
+    if (typeof (process.stdin as any).setRawMode !== 'function') {
+      (process.stdin as any).setRawMode = vi.fn(() => true);
+    }
   });
 
   afterEach(() => {
