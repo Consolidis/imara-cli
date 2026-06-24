@@ -1,6 +1,6 @@
 {
   "name": "@consolidis/imara-cli",
-  "version": "2.3.6",
+  "version": "2.10.6",
   "description": "Agent de codage IA pour le terminal — propulsé par Imara AI",
   "main": "dist/index.js",
   "bin": {
