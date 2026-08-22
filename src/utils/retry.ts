@@ -6,6 +6,7 @@ export interface RetryConfig {
   onRetry?: (error: unknown, attempt: number, delayMs: number) => void;
   maxTimeMs?: number; // Maximum elapsed time in milliseconds
   constant?: boolean; // Use constant delay instead of backoff/jitter
+  signal?: AbortSignal; // Annulation utilisateur : stoppe immediatement sans retry
 }
 
 export const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
@@ -16,6 +17,7 @@ export const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
   onRetry: () => {},
   maxTimeMs: process.env.NODE_ENV === 'test' ? 0 : 90000, // 1min 30s limit
   constant: false,
+  signal: undefined as unknown as AbortSignal, // jamais annule par defaut
 };
 
 /**
@@ -25,7 +27,6 @@ export function isRetriableError(error: unknown, config: Required<RetryConfig> =
   if (!error) return false;
   const msg = error instanceof Error ? error.message : String(error);
   const lowerMsg = msg.toLowerCase();
-
   // Explicit Cloudflare blocks / saturations / rate limits are always retriable
   if (
     lowerMsg.includes('cloudflare') ||
@@ -39,7 +40,6 @@ export function isRetriableError(error: unknown, config: Required<RetryConfig> =
   ) {
     return true;
   }
-
   // Exclude explicit client failures immediately
   if (
     lowerMsg.includes('400') ||
@@ -50,23 +50,20 @@ export function isRetriableError(error: unknown, config: Required<RetryConfig> =
   ) {
     return false;
   }
-
   // 1. Check for specific status code patterns
-  const statusMatch = msg.match(/\b(408|429|500|502|503|504)\b/) || 
-                      msg.match(/code\s*(\d+)/i) || 
-                      msg.match(/status\s*(\d+)/i);
+  const statusMatch = msg.match(/\b(408|429|500|502|503|504)\b/) ||
+                       msg.match(/code\s*(\d+)/i) ||
+                       msg.match(/status\s*(\d+)/i);
   if (statusMatch) {
     const code = parseInt(statusMatch[1], 10);
     if (config.retryableStatusCodes.includes(code)) return true;
   }
-
   // 2. Direct string checks for status codes
   for (const code of config.retryableStatusCodes) {
     if (msg.includes(String(code))) {
       return true;
     }
   }
-
   // 3. DNS / connection / network timeout error identifiers
   const networkPatterns = [
     /timeout/i,
@@ -83,45 +80,49 @@ export function isRetriableError(error: unknown, config: Required<RetryConfig> =
     /fetch\s*failed/i,
     /undici/i,
   ];
-
   if (networkPatterns.some(p => p.test(lowerMsg))) {
     return true;
   }
-
   return false;
 }
 
 /**
  * Executes a promise-returning function with retry, exponential backoff, and full jitter.
+ * If a signal is provided and aborted, execution stops immediately WITHOUT retrying:
+ * the user's cancellation must never be treated as a retriable condition.
  */
 export async function executeWithRetry<T>(
   fn: () => Promise<T>,
-  config: RetryConfig = {}
-): Promise<T> {
+  config: RetryConfig = {}): Promise<T> {
   const finalConfig = { ...DEFAULT_RETRY_CONFIG, ...config };
   let lastError: unknown;
   const startTime = Date.now();
-
+  const signal = finalConfig.signal;
   for (let attempt = 0; attempt <= finalConfig.maxRetries; attempt++) {
+    // Annulation utilisateur : ne jamais demarrer une tentative si le signal est aborted
+    if (signal && signal.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
     try {
       return await fn();
     } catch (error) {
       lastError = error;
-
+      // Annulation utilisateur : l'AbortError ne doit JAMAIS etre retrie
+      if (signal && signal.aborted) {
+        throw error;
+      }
       const elapsedMs = Date.now() - startTime;
       if (
-        attempt === finalConfig.maxRetries || 
-        !isRetriableError(error, finalConfig) || 
+        attempt === finalConfig.maxRetries ||
+        !isRetriableError(error, finalConfig) ||
         (finalConfig.maxTimeMs > 0 && elapsedMs >= finalConfig.maxTimeMs)
       ) {
         throw error;
       }
-
       // Jitter or constant delay
       let delayMs = finalConfig.constant
         ? finalConfig.baseDelayMs
         : Math.random() * Math.min(finalConfig.maxDelayMs, finalConfig.baseDelayMs * Math.pow(2, attempt));
-
       if (finalConfig.maxTimeMs > 0) {
         const remainingMs = finalConfig.maxTimeMs - elapsedMs;
         if (remainingMs <= 0) {
@@ -131,16 +132,13 @@ export async function executeWithRetry<T>(
           delayMs = remainingMs;
         }
       }
-
       if (finalConfig.onRetry) {
         try {
           finalConfig.onRetry(error, attempt, delayMs);
         } catch { /* ignore callback errors */ }
       }
-
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
-
   throw lastError;
 }

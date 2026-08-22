@@ -83,4 +83,24 @@ describe('Agent', () => {
     const agent = new Agent();
     await expect(agent.run('test max loop')).rejects.toThrow("Nombre maximum d'itérations (120) dépassé. Arrêt de sécurité.");
   });
+  it('should stop without retrying when cancel() is called during execution', async () => {
+    let rejectChat: (e: Error) => void = () => {};
+    const mockChat = vi.fn().mockImplementation(() => {
+      return new Promise((_resolve, reject) => {
+        rejectChat = reject;
+      });
+    });
+    vi.mocked(ImaraClient).prototype.chat = mockChat;
+    const agent = new Agent();
+    const runPromise = agent.run('test cancel');
+    // Attendre que la requete soit en cours, puis annuler
+    await vi.waitFor(() => expect(mockChat).toHaveBeenCalled());
+    agent.cancel();
+    // Simuler le fetch annule (AbortError remonte depuis le client)
+    rejectChat(new DOMException('The operation was aborted.', 'AbortError'));
+    // run() doit sortir proprement sans rejeter et sans relancer de requete
+    await expect(runPromise).resolves.toBeUndefined();
+    expect(mockChat).toHaveBeenCalledTimes(1); // aucune relance apres annulation
+    expect(agent.getSessionStats().messages).toBe(3); // historique conserve (2 system + 1 user)
+  });
 });

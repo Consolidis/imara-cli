@@ -152,7 +152,7 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
 
     // ESCAPE Keypress listener to cancel agent processing at ANY moment
     const keypressHandler = (str: string, key: any) => {
-      if (key && (key.name === 'escape' || key.name === 'esc')) {
+      if (key && (key.name === 'escape' || key.name === 'esc' || (key.ctrl && key.name === 'c'))) {
         if (isProcessing) {
           const width = process.stdout.columns || 80;
           console.log(chalk.hex(theme.muted)('─'.repeat(width)));

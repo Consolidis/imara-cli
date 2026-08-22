@@ -217,7 +217,7 @@ export class Agent {
           if (readOnlyBatch.length > 0) {
             await this.executeReadOnlyBatch(readOnlyBatch, silentTools);
           }
-          if (this.paused) {
+          if (this.cancelled || this.paused) {
             break;
           }
           // MAJ STATUS BAR APRES TOOLS
@@ -468,13 +468,15 @@ export class Agent {
       const tc = toolCalls[i];
       const res = results[i];
       if (res instanceof Error) {
-        showToolResult(tc.name, 'Erreur');
         this.pushToolResult(tc.id, tc.name, `Erreur: ${res.message}`);
+        if (!this.cancelled) {
+          showToolResult(tc.name, 'Erreur');
+        }
       } else {
-        if (!silentTools.has(tc.name)) {
+        this.pushToolResult(tc.id, tc.name, res.content);
+        if (!silentTools.has(tc.name) && !this.cancelled) {
           showToolResult(tc.name, res.content);
         }
-        this.pushToolResult(tc.id, tc.name, res.content);
       }
     }
   }

@@ -87,4 +87,26 @@ describe('Retry Utility', () => {
       expect(isRetriableError(new Error('HttpError: 403'))).toBe(false);
     });
   });
+  describe('signal d\'annulation', () => {
+    it('ne tente aucune requete quand le signal est deja aborted', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const fn = vi.fn().mockResolvedValue('success');
+      await expect(
+        executeWithRetry(fn, { signal: controller.signal })
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(fn).toHaveBeenCalledTimes(0);
+    });
+    it('ne re-tente pas quand le signal devient aborted pendant une tentative', async () => {
+      const controller = new AbortController();
+      const fn = vi.fn().mockImplementation(() => {
+        controller.abort();
+        throw new Error('503 Service Unavailable');
+      });
+      await expect(
+        executeWithRetry(fn, { maxRetries: 5, baseDelayMs: 1, maxDelayMs: 2, signal: controller.signal })
+      ).rejects.toThrow('503');
+      expect(fn).toHaveBeenCalledTimes(1); // pas de retry apres annulation utilisateur
+    });
+  });
 });

@@ -70,6 +70,7 @@ export class ImaraClient {
         return await response.json() as UserInfo;
       }, {
         constant: true,
+        signal: this.abortController.signal,
         maxRetries: process.env.NODE_ENV === 'test' ? 0 : 30,
         baseDelayMs: process.env.NODE_ENV === 'test' ? 0 : 5000,
         maxTimeMs: process.env.NODE_ENV === 'test' ? 0 : 70000,
@@ -227,6 +228,7 @@ export class ImaraClient {
           return data;
         }, {
           constant: true,
+          signal: this.abortController.signal,
           maxRetries: process.env.NODE_ENV === 'test' ? 0 : 30,
           baseDelayMs: process.env.NODE_ENV === 'test' ? 0 : 5000,
           maxTimeMs: process.env.NODE_ENV === 'test' ? 0 : 300000,
