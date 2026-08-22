@@ -7,7 +7,6 @@ const SERVICE_NAME = 'imara-cli';
 const ACCOUNT_NAME = 'api-key';
 
 // --- FileKeychain : fallback fichier pour Linux sans libsecret ---
-
 const FALLBACK_DIR = join(homedir(), '.imara');
 
 function getFallbackPath(key: string): string {
@@ -69,7 +68,6 @@ async function keytarDeleteSafe(account: string): Promise<boolean> {
 }
 
 // --- Classe principale Keychain avec fallback ---
-
 export class Keychain {
   static async save(apiKey: string): Promise<void> {
     const ok = await keytarSaveSafe(ACCOUNT_NAME, apiKey);
@@ -111,6 +109,31 @@ export class Keychain {
 
   static async deleteExternalKey(modelName: string): Promise<void> {
     const account = `external-key-${modelName.toLowerCase()}`;
+    const ok = await keytarDeleteSafe(account);
+    if (!ok) {
+      deleteFallbackFile(account);
+    } else {
+      deleteFallbackFile(account);
+    }
+  }
+
+  static async saveTavilyKey(apiKey: string): Promise<void> {
+    const account = 'tavily-key';
+    const ok = await keytarSaveSafe(account, apiKey);
+    if (!ok) {
+      writeFallbackFile(account, apiKey);
+    }
+  }
+
+  static async getTavilyKey(): Promise<string | null> {
+    const account = 'tavily-key';
+    const fromKeytar = await keytarGetSafe(account);
+    if (fromKeytar) return fromKeytar;
+    return readFallbackFile(account);
+  }
+
+  static async deleteTavilyKey(): Promise<void> {
+    const account = 'tavily-key';
     const ok = await keytarDeleteSafe(account);
     if (!ok) {
       deleteFallbackFile(account);

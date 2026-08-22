@@ -1,16 +1,11 @@
 import { ToolDefinition } from '../agent.types';
-import { getApiUrl, getApiKey } from '../../utils/env';
-
-interface SearchResult {
-  title: string;
-  description: string;
-  url: string;
-}
+import { searchTavily, fetchWithJinaReader, getTavilyKey } from '../../utils/tavily';
+import { getCachedSearch, setCachedSearch } from '../../utils/search-cache';
 
 export class WebSearchTool {
   static definition: ToolDefinition = {
     name: 'web_search',
-    description: 'Recherche des informations sur le web (mode search) ou analyse le design visuel d\'un site (mode design). Utilise l\'API Imara pour la recherche et le fetch direct pour l\'extraction.',
+    description: 'Recherche des informations sur le web (mode search) ou analyse le design visuel d\'un site (mode design). Utilise Tavily pour la recherche, Jina Reader pour l\'extraction de pages, avec cache local.',
     parameters: {
       type: 'object',
       properties: {
@@ -40,7 +35,6 @@ export class WebSearchTool {
 
   static async run(args: { query?: string; url?: string; mode?: string; max_results?: number }): Promise<string> {
     const mode = args.mode || 'search';
-
     // Mode design : analyse visuelle d'une URL
     if (mode === 'design') {
       if (!args.url) {
@@ -48,63 +42,67 @@ export class WebSearchTool {
       }
       return await this.analyzeDesign(args.url);
     }
-
     // Mode search avec URL : extraction de contenu textuel
     if (args.url && !args.query) {
       return await this.extractPage(args.url);
     }
-
-    // Mode search standard : recherche via API Imara
+    // Mode search standard : cache local puis Tavily en direct
     const query = (args.query || '').trim();
     if (!query) {
       throw new Error('La requete de recherche est vide. Fournissez une query ou une url.');
     }
     const maxResults = Math.min(args.max_results || 5, 10);
-    const results = await this.searchImara(query, maxResults);
-    return this.formatResults(results, query);
+
+    // 1. Cache local d'abord (evite de re-frapper Tavily et economise les credits)
+    const cached = getCachedSearch(query);
+    if (cached !== null) {
+      return cached;
+    }
+
+    // 2. Aucune cle Tavily : fallback propre (pas de throw bloquant)
+    if (!(await getTavilyKey())) {
+      return this.unavailableMessage('la cle API Tavily n\'est pas configuree. Lancez `imara config set tavilyApiKey <cle>` pour l\'activer.');
+    }
+
+    // 3. Recherche Tavily en direct
+    try {
+      const data = await searchTavily(query, maxResults);
+      const formatted = this.formatResults(data, query);
+      // 4. Ecriture dans le cache local
+      setCachedSearch(query, formatted);
+      return formatted;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      return this.unavailableMessage(reason);
+    }
   }
 
-  // ── MODE SEARCH ─────────────────────────────────────────────────────────
-
-  private static async searchImara(query: string, maxResults: number): Promise<SearchResult[]> {
-    const baseUrl = getApiUrl();
-    const apiKey = getApiKey();
-    if (!apiKey) {
-      throw new Error('Aucune cle API Imara trouvee. Lancez `imara login`.');
-    }
-    const response = await fetch(`${baseUrl}/v1/agent/search`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ query, max_results: maxResults })
-    });
-    if (!response.ok) {
-      if (response.status === 401) throw new Error('Cle API Imara invalide ou expiree. Relancez `imara login`.');
-      if (response.status === 402) throw new Error('Credits insuffisants pour la recherche web. Rechargez sur imara.consolidis.com.');
-      throw new Error(`API Imara a retourne une erreur (code ${response.status})`);
-    }
-    const data = await response.json() as { results?: SearchResult[] };
-    if (!data || !Array.isArray(data.results) || data.results.length === 0) {
-      throw new Error(`Aucun resultat trouve pour "${query}" sur l'API Imara.`);
-    }
-    return data.results;
+  /** Message de repli quand la recherche est indisponible (comportement identique au chat). */
+    /** Message de repli quand la recherche est indisponible (comportement identique au chat). */
+  private static unavailableMessage(reason: string): string {
+    return 'Desole, le service de recherche en ligne est actuellement indisponible (' + reason + ').\nVeuillez informer poliment l\'utilisateur que vous ne pouvez pas effectuer de recherche sur le web en temps reel pour le moment, et repondez au mieux a sa demande en utilisant uniquement vos connaissances internes existantes.';
   }
-  // ── MODE SEARCH : Extraction de page ────────────────────────────────────
 
+// ── MODE SEARCH : Extraction de page ────────────────────────────────────
   private static async extractPage(url: string): Promise<string> {
     const parsedUrl = this.parseUrl(url);
-    const response = await this.fetchPage(parsedUrl.toString());
-    const html = await response.text();
-    const text = this.htmlToText(html);
-    const MAX_CHARS = 8000;
-    const truncated = text.length > MAX_CHARS
-      ? text.substring(0, MAX_CHARS) + '\n\n[... Contenu tronque a 8000 caracteres. Lisez la page originale pour la suite.]'
-      : text;
-    return `Contenu extrait de : ${url}\n\n${truncated}`;
+    const urlStr = parsedUrl.toString();
+    // Jina Reader en priorite (robuste face aux sites proteges / JS)
+    try {
+      const content = await fetchWithJinaReader(urlStr);
+      return `Contenu extrait de : ${url}\n\n${content}`;
+    } catch {
+      // Fallback : fetch direct + conversion HTML vers texte
+      const response = await this.fetchPage(urlStr);
+      const html = await response.text();
+      const text = this.htmlToText(html);
+      const MAX_CHARS = 8000;
+      const truncated = text.length > MAX_CHARS
+        ? text.substring(0, MAX_CHARS) + '\n\n[... Contenu tronque a 8000 caracteres. Lisez la page originale pour la suite.]'
+        : text;
+      return `Contenu extrait de : ${url}\n\n${truncated}`;
+    }
   }
-
   private static htmlToText(html: string): string {
     let text = html;
     text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
@@ -132,14 +130,23 @@ export class WebSearchTool {
     return text.trim();
   }
 
-  private static formatResults(results: SearchResult[], query: string): string {
-    let output = `Recherche web (Imara) pour: "${query}"\n`;
-    output += `\n${results.length} resultat(s) trouve(s):\n\n`;
+  /** Formate la reponse Tavily (answer + sources) pour l'agent. */
+  private static formatResults(data: { answer?: string; results?: Array<{ title: string; url: string; content?: string }> }, query: string): string {
+    let output = `Recherche web (Tavily) pour: "${query}"\n`;
+    if (data.answer) {
+      output += `\nRéponse directe: ${data.answer}\n`;
+    }
+    const results = data.results || [];
+    if (results.length === 0) {
+      output += `\nAucun résultat trouvé pour "${query}".`;
+      return output;
+    }
+    output += `\n${results.length} résultat(s) trouvé(s):\n\n`;
     for (let i = 0; i < results.length; i++) {
       const r = results[i];
       output += `${i + 1}. ${r.title}\n`;
-      if (r.description) {
-        output += `   ${r.description.substring(0, 250)}${r.description.length > 250 ? '...' : ''}\n`;
+      if (r.content) {
+        output += `   ${r.content.substring(0, 250)}${r.content.length > 250 ? '...' : ''}\n`;
       }
       output += `   URL: ${r.url}\n`;
       if (i < results.length - 1) output += '\n';
@@ -148,7 +155,6 @@ export class WebSearchTool {
   }
 
   // ── Utilitaires de fetch ────────────────────────────────────────────────
-
   private static parseUrl(url: string): URL {
     let parsedUrl: URL;
     try { parsedUrl = new URL(url); } catch {
@@ -174,10 +180,10 @@ export class WebSearchTool {
     }
     return response;
   }
+
   // ═══════════════════════════════════════════════════════════════════════
   // MODE DESIGN
   // ═══════════════════════════════════════════════════════════════════════
-
   /**
    * Analyse le design d'une page web a partir de son HTML/CSS.
    * Extrait : frameworks, couleurs, polices, structure du DOM, breakpoints, meta.
@@ -186,7 +192,6 @@ export class WebSearchTool {
     const parsedUrl = this.parseUrl(url);
     const response = await this.fetchPage(parsedUrl.toString());
     const html = await response.text();
-
     const framework = this.detectFramework(html);
     const colors = this.extractColors(html);
     const fonts = this.extractFonts(html);
@@ -194,10 +199,8 @@ export class WebSearchTool {
     const breakpoints = this.extractBreakpoints(html);
     const meta = this.extractMeta(html);
     const icons = this.extractIcons(html);
-
     let output = `Analyse design de : ${url}\n`;
     output += `─${'─'.repeat(50)}\n\n`;
-
     // Framework
     output += `FRAMEWORKS CSS\n`;
     if (framework.length > 0) {
@@ -205,17 +208,14 @@ export class WebSearchTool {
     } else {
       output += `  (aucun framework majeur detecte)\n`;
     }
-
     // Couleurs
     output += `\nCOULEURS\n`;
     if (colors.length > 0) {
-      // Grouper et dedupliquer (max 15 couleurs)
       const unique = [...new Set(colors)].slice(0, 15);
       unique.forEach(c => output += `  ${c}\n`);
     } else {
       output += `  (aucune couleur explicite detectee)\n`;
     }
-
     // Polices
     output += `\nPOLICES\n`;
     if (fonts.length > 0) {
@@ -223,32 +223,26 @@ export class WebSearchTool {
     } else {
       output += `  (polices systeme par defaut)\n`;
     }
-
     // Structure
     output += `\nSTRUCTURE DU DOM\n`;
     output += structure;
-
     // Icons
     if (icons.length > 0) {
       output += `\nICONES\n`;
       icons.slice(0, 5).forEach(i => output += `  ${i}\n`);
     }
-
     // Breakpoints
     if (breakpoints.length > 0) {
       output += `\nBREAKPOINTS / MEDIA QUERIES\n`;
       breakpoints.slice(0, 8).forEach(b => output += `  ${b}\n`);
     }
-
     // Meta
     output += `\nMETA\n`;
     output += meta;
-
     return output;
   }
 
   // ── Detection Framework ─────────────────────────────────────────────────
-
   private static detectFramework(html: string): string[] {
     const frameworks: Array<{ name: string; patterns: RegExp[] }> = [
       { name: 'Tailwind CSS', patterns: [/tailwind/i, /cdn\.tailwindcss/i, /@tailwindcss/i] },
@@ -265,7 +259,6 @@ export class WebSearchTool {
       { name: 'Shadcn/ui', patterns: [/shadcn/i, /shadcn\/ui/i] },
       { name: 'Font Awesome', patterns: [/font-awesome/i, /fontawesome/i, /fa\.css/] },
     ];
-
     const detected: string[] = [];
     for (const fw of frameworks) {
       if (fw.patterns.some(p => p.test(html))) {
@@ -274,25 +267,21 @@ export class WebSearchTool {
     }
     return detected;
   }
-  // ── Extraction Couleurs ─────────────────────────────────────────────────
 
+  // ── Extraction Couleurs ─────────────────────────────────────────────────
   private static extractColors(html: string): string[] {
     const colors: string[] = [];
-
     // Couleurs dans les balises <style> et <link rel="stylesheet">
     const styleBlocks = html.match(/<style[^>]*>[\s\S]*?<\/style>/gi) || [];
     const cssBlocks = html.match(/<link[^>]*rel=["']stylesheet["'][^>]*>/gi) || [];
-
     const allCSS = [
       ...styleBlocks.map(b => b.replace(/<\/?style[^>]*>/gi, '')),
     ].join('\n');
-
     // Regex pour les couleurs CSS
     const colorPatterns = [
       /(?:color|background[^-]|background-color|border-color|outline-color)\.*?\s*:\s*(#[0-9a-fA-F]{3,8}|rgba?\s*\([^)]+\)|hsla?\s*\([^)]+\))/g,
       /(?:background|background-image)\s*:\s*(?:linear-gradient|radial-gradient|conic-gradient)\([^)]*?(#[0-9a-fA-F]{3,8}|rgba?\s*\([^)]+\))/g,
     ];
-
     for (const pattern of colorPatterns) {
       const matches = allCSS.matchAll(pattern);
       for (const m of matches) {
@@ -300,26 +289,21 @@ export class WebSearchTool {
         colors.push(color.trim());
       }
     }
-
     // Couleurs inline dans les attributs style
     const inlineStyles = html.match(/style=["'][^"']*["']/gi) || [];
     for (const style of inlineStyles) {
       const inlineColors = style.match(/(#[0-9a-fA-F]{3,8}|rgba?\s*\([^)]+\))/g);
       if (inlineColors) colors.push(...inlineColors);
     }
-
     // Classes utilitaires Tailwind (bg-*, text-*, border-*)
     const twColors = html.match(/(?:bg|text|border|from|via|to|ring|outline)-(?:red|blue|green|yellow|purple|pink|indigo|teal|orange|amber|lime|emerald|cyan|sky|violet|fuchsia|rose|stone|neutral|zinc|gray|slate)-\d{2,3}/gi);
     if (twColors) colors.push(...[...new Set(twColors)].slice(0, 20));
-
     return colors;
   }
 
   // ── Extraction Polices ──────────────────────────────────────────────────
-
   private static extractFonts(html: string): string[] {
     const fonts: string[] = [];
-
     // Google Fonts
     const gfLinks = html.match(/fonts\.googleapis\.com\/css2?\?[^"'&\s]+/gi) || [];
     for (const link of gfLinks) {
@@ -332,7 +316,6 @@ export class WebSearchTool {
         fonts.push(...names);
       }
     }
-
     // Google Fonts via @import dans le CSS
     const gfImports = html.match(/@import\s+url\([^)]*fonts\.googleapis[^)]*\)/gi) || [];
     for (const imp of gfImports) {
@@ -345,7 +328,6 @@ export class WebSearchTool {
         fonts.push(...names);
       }
     }
-
     // Polices declarees dans les styles (font-family)
     const fontDecls = html.match(/font-family\s*:\s*['"]?([^;"'}]+)['"]?/gi) || [];
     for (const decl of fontDecls) {
@@ -355,14 +337,12 @@ export class WebSearchTool {
         .filter(n => n && !n.toLowerCase().includes('sans-serif') && !n.toLowerCase().includes('serif') && !n.toLowerCase().includes('monospace'));
       fonts.push(...names);
     }
-
     return [...new Set(fonts)];
   }
-  // ── Extraction Structure ────────────────────────────────────────────────
 
+  // ── Extraction Structure ────────────────────────────────────────────────
   private static extractStructure(html: string): string {
     const tags: string[] = [];
-
     // Balises semantiques avec leur classe/id si presente
     const semanticPatterns = [
       /<header[^>]*>/gi, /<nav[^>]*>/gi, /<main[^>]*>/gi, /<footer[^>]*>/gi,
@@ -377,7 +357,6 @@ export class WebSearchTool {
       /<div[^>]*class=["'][^"']*banner[^"']*["'][^>]*>/gi,
       /<div[^>]*class=["'][^"']*card[^"']*["'][^>]*>/gi,
     ];
-
     for (const pattern of semanticPatterns) {
       const matches = html.match(pattern);
       if (matches) {
@@ -392,112 +371,85 @@ export class WebSearchTool {
         }
       }
     }
-
     // Niveaux de titres
     for (let i = 1; i <= 6; i++) {
       const hasH = new RegExp(`<h${i}[^>]*>`, 'gi').test(html);
       if (hasH) tags.push(`<h${i}> present`);
     }
-
     // Navigation bars
     if (/<ul[^>]*class=["'][^"']*nav[^"']*["']/gi.test(html)) tags.push('<ul.nav>');
     if (/navbar/i.test(html)) tags.push('navbar detectee');
     if (/menu/i.test(html)) tags.push('menu detecte');
-
     // Grid et layout
     if (/grid|flex/i.test(html)) {
       if (html.match(/grid-cols-\d+|grid-template-columns/i)) tags.push('CSS Grid (explicite)');
       if (html.match(/flex-(?:wrap|row|col)/i)) tags.push('Flexbox');
     }
-
     // Carousel / Slider
     if (/carousel|slider|swiper|slick/i.test(html)) tags.push('carousel/slider detecte');
-
     return tags.slice(0, 18).map(t => `  ${t}`).join('\n') || '  (structure basique)';
   }
 
   // ── Extraction Breakpoints ──────────────────────────────────────────────
-
   private static extractBreakpoints(html: string): string[] {
     const bps: string[] = [];
-
     // Media queries dans le HTML (style blocks et link)
     const styleBlocks = html.match(/<style[^>]*>[\s\S]*?<\/style>/gi) || [];
     for (const block of styleBlocks) {
       const mqs = block.match(/@media\s*\([^)]+\)\s*\{/gi);
       if (mqs) bps.push(...mqs);
     }
-
     // Breakpoints Tailwind dans les classes
     const twBps = html.match(/(?:sm|md|lg|xl|2xl):[a-zA-Z]+/g);
     if (twBps) bps.push(...[...new Set(twBps)].slice(0, 10));
-
     return [...new Set(bps)].slice(0, 8);
   }
 
   // ── Extraction Meta ─────────────────────────────────────────────────────
-
   private static extractMeta(html: string): string {
     const lines: string[] = [];
-
     // Viewport
     const vp = html.match(/<meta[^>]*name=["']viewport["'][^>]*>/i);
     if (vp) lines.push(`  Viewport: present`);
-
     // Description
     const desc = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)["']/i);
     if (desc) lines.push(`  Description: ${desc[1].substring(0, 80)}`);
-
     // Favicon
     const favicon = html.match(/<link[^>]*rel=["'](?:shortcut )?icon["'][^>]*href=["']([^"']*)["']/i);
     if (favicon) lines.push(`  Favicon: ${favicon[1]}`);
-
     // Title
     const title = html.match(/<title>([\s\S]*?)<\/title>/i);
     if (title) lines.push(`  Titre: ${title[1].trim().substring(0, 80)}`);
-
     // Langue
     const lang = html.match(/<html[^>]*lang=["']([^"']*)["']/i);
     if (lang) lines.push(`  Langue: ${lang[1]}`);
-
     // Theme-color
     const theme = html.match(/<meta[^>]*name=["']theme-color["'][^>]*content=["']([^"']*)["']/i);
     if (theme) lines.push(`  Theme-color: ${theme[1]}`);
-
     // Open Graph
     const ogTitle = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']*)["']/i);
     if (ogTitle) lines.push(`  OG: ${ogTitle[1].substring(0, 60)}`);
-
     return lines.join('\n') || '  (meta de base uniquement)';
   }
 
   // ── Extraction Icones ──────────────────────────────────────────────────
-
   private static extractIcons(html: string): string[] {
     const icons: string[] = [];
-
     // Font Awesome
     if (/font-awesome|fontawesome/i.test(html)) icons.push('Font Awesome');
     if (/fa-[a-z][a-z-]*/gi.test(html)) icons.push('Font Awesome (classes fa-*)');
-
     // Material Icons
     if (/material-icons/i.test(html)) icons.push('Material Icons');
-
     // Heroicons
     if (/heroicon/i.test(html)) icons.push('Heroicons');
-
     // Ionicons
     if (/ionicon/i.test(html)) icons.push('Ionicons');
-
     // Feather Icons
     if (/feather/i.test(html)) icons.push('Feather Icons');
-
     // Lucide
     if (/lucide/i.test(html)) icons.push('Lucide');
-
     // SVG inline
     if (/<svg[^>]*>[\s\S]*?<\/svg>/gi.test(html)) icons.push('SVG inline present');
-
     return [...new Set(icons)];
   }
 }

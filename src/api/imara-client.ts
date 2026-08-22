@@ -11,6 +11,7 @@ import { homedir } from 'os';
 import chalk from 'chalk';
 import { isNativeModel } from '../utils/model';
 import { Keychain } from '../auth/keychain';
+import { containsTechnicalDetails, sanitizeUserErrorMessage } from '../utils/sanitize-errors';
 
 function sanitizeForJson(value: string): string {
   return value.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
@@ -133,7 +134,7 @@ export class ImaraClient {
             method: 'POST',
             headers,
             body: payloadStr,
-            timeoutMs: isNative ? 30000 : 60000,
+            timeoutMs: isNative ? 120000 : 60000,
             retries: 0,
             externalSignal: this.abortController.signal
           });
@@ -147,7 +148,7 @@ export class ImaraClient {
                 if (raw.toLowerCase().includes('wallet') || raw.toLowerCase().includes('balance') || raw.toLowerCase().includes('insufficient')) {
                   errorMsg = 'Solde insuffisant dans votre wallet. Veuillez recharger vos crédits sur https://imara.consolidis.com pour utiliser ce modèle.';
                 } else if (!isTechnicalError(raw)) {
-                  errorMsg = raw;
+                  errorMsg = sanitizeUserErrorMessage(raw);
                 }
               } catch (_e) { /* ignore */ }
               throw new Error(errorMsg);
@@ -179,7 +180,7 @@ export class ImaraClient {
               const errBody = await response.json() as Record<string, unknown>;
               const raw = String(errBody?.message || errBody?.error || '');
               if (!isTechnicalError(raw)) {
-                errorMsg = raw || errorMsg;
+                errorMsg = sanitizeUserErrorMessage(raw || errorMsg);
               }
             } catch (_e) { /* ignore parse errors */ }
             throw new Error(errorMsg);
@@ -228,7 +229,7 @@ export class ImaraClient {
           constant: true,
           maxRetries: process.env.NODE_ENV === 'test' ? 0 : 30,
           baseDelayMs: process.env.NODE_ENV === 'test' ? 0 : 5000,
-          maxTimeMs: process.env.NODE_ENV === 'test' ? 0 : 70000,
+          maxTimeMs: process.env.NODE_ENV === 'test' ? 0 : 300000,
           onRetry: (error, attempt, delayMs) => {
             if (process.env.NODE_ENV === 'test') return;
             const sec = Math.ceil(delayMs / 1000);
@@ -271,17 +272,5 @@ export class ImaraClient {
  * that should never be exposed to the end user (Cloudflare internals, stack traces, etc.)
  */
 function isTechnicalError(msg: string): boolean {
-  if (!msg) return false;
-  const technicalPatterns = [
-    /cloudflare/i,
-    /AiError/i,
-    /Capacity temporarily exceeded/i,
-    /\{"errors":/,
-    /\{"success":/,
-    /code":\s*\d{4}/,
-    /ee[0-9a-f]{6,}/i,   // UUIDs from Cloudflare error codes
-    /at\s+\w+\s+\(.*:\d+:\d+\)/,  // Stack trace lines
-    /Error:\s+Error:/,   // Double-Error prefix
-  ];
-  return technicalPatterns.some(p => p.test(msg));
+  return containsTechnicalDetails(msg);
 }

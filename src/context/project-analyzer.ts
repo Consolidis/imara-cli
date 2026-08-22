@@ -4,7 +4,7 @@ import { execSync } from 'child_process';
 import fg from 'fast-glob';
 
 export class ProjectAnalyzer {
-  static async analyze(): Promise<{ name: string; type: string; structure: string; recentCommits: string; gitStatus: string; multiGitStatus?: string; scripts: Record<string, unknown>; dependencies: Record<string, unknown>; conductor: { active: boolean } }> {
+  static async analyze(): Promise<{ name: string; type: string; structure: string; recentCommits: string; gitStatus: string; multiGitStatus?: string; scripts: Record<string, unknown>; dependencies: Record<string, unknown>; conductor: { active: boolean }; imaraMdContent?: string }> {
     const packageDetails = this.getPackageDetails();
     const projectName = String(packageDetails?.name || path.basename(process.cwd()));
     const projectInfo = {
@@ -18,7 +18,8 @@ export class ProjectAnalyzer {
       dependencies: (packageDetails?.dependencies as Record<string, unknown> | undefined) || {},
       conductor: {
         active: fs.existsSync(path.join(process.cwd(), '.imara', 'conductor'))
-      }
+      },
+      imaraMdContent: this.findImaraMdFiles()
     };
 
     return projectInfo;
@@ -178,5 +179,34 @@ export class ProjectAnalyzer {
     } catch {
       return { branch: 'unknown', status: '' };
     }
+  }
+  /** Cherche et lit les fichiers IMARA.md dans le projet (racine + 1 niveau de profondeur) */
+  private static findImaraMdFiles(): string | undefined {
+    const root = process.cwd();
+    const candidates: string[] = [];
+    // Racine
+    const rootMd = path.join(root, 'IMARA.md');
+    if (fs.existsSync(rootMd)) candidates.push(rootMd);
+    // Sous-dossiers directs (1 niveau de profondeur)
+    try {
+      const items = fs.readdirSync(root);
+      for (const item of items) {
+        if (item === 'node_modules' || item === '.git') continue;
+        const fullPath = path.join(root, item);
+        if (fs.statSync(fullPath).isDirectory()) {
+          const subMd = path.join(fullPath, 'IMARA.md');
+          if (fs.existsSync(subMd)) candidates.push(subMd);
+        }
+      }
+    } catch { /* ignore */ }
+    if (candidates.length === 0) return undefined;
+    const parts = candidates.map(p => {
+      const relPath = path.relative(root, p).replace(/\\/g, '/');
+      try {
+        const content = fs.readFileSync(p, 'utf-8').trim();
+        return `--- ${relPath} ---\n${content}`;
+      } catch { return null; }
+    }).filter(Boolean) as string[];
+    return parts.length > 0 ? parts.join('\n\n') : undefined;
   }
 }

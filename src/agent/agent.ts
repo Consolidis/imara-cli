@@ -16,23 +16,12 @@ import chalk from 'chalk';
 import { theme } from '../ui/theme';
 import { fromUnknown, ImaraError } from '../types/errors';
 import { Result } from '../types/result';
+import { sanitizeUserErrorMessage } from '../utils/sanitize-errors';
 
+// Deplace vers src/utils/sanitize-errors.ts (utilise via showErrorPanel)
+// Cette fonction privée est conservee par compatibilite mais delgue.
 function sanitizeErrorMessage(msg: string): string {
-  const technicalPatterns = [
-    /cloudflare/i, /AiError/i, /Capacity temporarily exceeded/i,
-    /\{"errors":/, /\{"success":/, /Error:\s+Error:/,
-    /ee[0-9a-f]{6,}/i, /at\s+\w+\s+\(.*:\d+:\d+\)/,
-  ];
-  if (technicalPatterns.some(p => p.test(msg))) {
-    if (/429|Capacity|satur[eé]|quota/i.test(msg)) {
-      return 'Le service est temporairement saturé. Réessayez dans quelques secondes.';
-    }
-    if (/401|unauthorized|authentifi/i.test(msg)) {
-      return 'Clé API invalide. Relancez `imara login`.';
-    }
-    return 'Le service est temporairement indisponible. Réessayez dans un instant.';
-  }
-  return msg;
+  return sanitizeUserErrorMessage(msg);
 }
 
 export class AgentCancelledError extends Error {

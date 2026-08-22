@@ -3,6 +3,7 @@
 import chalk from 'chalk';
 import { theme } from '../theme';
 import { ImaraError, ErrorCategory } from '../../types/errors';
+import { sanitizeUserErrorMessage } from '../../utils/sanitize-errors';
 
 const CATEGORY_META: Record<ErrorCategory, {
   icon: string;
@@ -76,7 +77,7 @@ export function showErrorPanel(error: ImaraError | Error): void {
   const label    = meta.label;
   const color    = meta.color;
   const hint     = meta.hint;
-  const msg      = isImara ? error.message : error.message;
+  const msg      = sanitizeUserErrorMessage(isImara ? error.message : error.message);
 
   const width = Math.min(72, (process.stdout.columns || 80) - 4);
   const topBorder    = chalk.hex(theme.muted)('┌─') + chalk.hex(color)(` ${icon} ${label} `) + chalk.hex(theme.muted)(`[${code}] `) + chalk.hex(theme.muted)('─'.repeat(Math.max(1, width - 6 - label.length - code.length - 8)));

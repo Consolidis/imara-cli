@@ -27,6 +27,7 @@ export interface ConfigSchema {
   persistHistory: boolean;
   userName: string;
   userEmail: string;
+  tavilyApiKey: string;
 }
 
 export const DEFAULT_CONFIG: ConfigSchema = {
@@ -55,6 +56,7 @@ export const DEFAULT_CONFIG: ConfigSchema = {
   persistHistory: true,
   userName: '',
   userEmail: '',
+  tavilyApiKey: '',
 };
 
 export class ConfigManager {
