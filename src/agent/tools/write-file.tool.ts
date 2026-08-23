@@ -57,7 +57,7 @@ export class WriteFileTool {
     showDiff(args.path, oldContent, normalizedContent);
     fs.writeFileSync(fullPath, normalizedContent, 'utf-8');
 
-    let response = 'Fichier ' + args.path + ' ecrit avec succes (' + lineCount + ' lignes).';
+    let response = 'Fichier ' + args.path + ' écrit avec succes (' + lineCount + ' lignes).';
 
     // Avertissement si > 200 lignes
     if (lineCount > WriteFileTool.MAX_LINES) {

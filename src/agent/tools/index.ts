@@ -32,12 +32,13 @@ import { AtomicSectionReplaceTool } from './atomic-section-replace.tool';
 import { BatchImportAddTool } from './batch-import-add.tool';
 import { ValidateFileTool } from './validate-file.tool';
 import { InvestigateFileTool } from './investigate-file.tool';
+import { InvestigateProjectTool } from './investigate-project.tool';
+import { ConductorSearchArchivesTool } from './conductor-search-archives.tool';
 
 // Outils "purs" (lecture seule) dont les resultats sont mis en cache (TTL 30s)
 const CACHED_TOOLS = new Set([
   'read_file', 'read_file_range', 'inspect_file', 'code_map',
-  'git_diff', 'list_directory', 'investigate_file'
-]);
+  'git_diff', 'list_directory', 'investigate_file', 'investigate_project', 'conductor_search_archives']);
 
 export const TOOLS_DEFINITIONS: ToolDefinition[] = [
   ReadFileTool.definition, WriteFileTool.definition, AppendFileTool.definition,
@@ -53,13 +54,14 @@ export const TOOLS_DEFINITIONS: ToolDefinition[] = [
   AtomicSectionReplaceTool.definition,
   BatchImportAddTool.definition,
   ValidateFileTool.definition,
-  InvestigateFileTool.definition];
+  InvestigateFileTool.definition,
+  InvestigateProjectTool.definition,
+  ConductorSearchArchivesTool.definition];
 
 export class ToolExecutor {
   static async execute(name: string, args: ToolArguments, agent?: AgentProxy): Promise<Result<string, ImaraError>> {
     const guard = this.guardConductor(name, args);
     if (!guard.ok) return guard;
-
     // Verification du cache pour les outils read-only
     if (CACHED_TOOLS.has(name)) {
       const cacheKey = toolCache.makeKey(name, args);
@@ -68,7 +70,6 @@ export class ToolExecutor {
         return ok(cached);
       }
     }
-
     try {
       let result: string;
       switch (name) {
@@ -160,14 +161,18 @@ export class ToolExecutor {
         case 'validate_file':
           result = await ValidateFileTool.run(args as { path: string });
           break;
-
         case 'investigate_file':
           result = await InvestigateFileTool.run(args as any);
+          break;
+        case 'investigate_project':
+          result = await InvestigateProjectTool.run(args as any);
+          break;
+        case 'conductor_search_archives':
+          result = await ConductorSearchArchivesTool.run(args as { query: string; max_results?: number });
           break;
         default:
           return err(new ImaraError(ErrorCategory.UNKNOWN, 'TOOL_UNKNOWN', `Tool inconnu: ${name}`));
       }
-
       // Auto-validation post-ecriture (activee via env IMARA_AUTO_VALIDATE=1)
       if (process.env.IMARA_AUTO_VALIDATE === '1' || process.env.IMARA_AUTO_VALIDATE === 'true') {
         const writeTools = new Set(['write_file', 'append_file', 'replace_in_file', 'batch_replace', 'atomic_section_replace']);
@@ -183,7 +188,6 @@ export class ToolExecutor {
           }
         }
       }
-
       // Mise en cache du resultat pour les outils read-only
       if (CACHED_TOOLS.has(name)) {
         const cacheKey = toolCache.makeKey(name, args);
@@ -194,12 +198,10 @@ export class ToolExecutor {
       return err(fromUnknown(reason));
     }
   }
-
   private static guardConductor(name: string, args?: ToolArguments): Result<void, ImaraError> {
     const dangerous = new Set(['write_file', 'append_file', 'replace_in_file', 'run_command', 'batch_replace', 'atomic_section_replace', 'batch_import_add']);
     const exempted = new Set(['git_commit']);
     if (exempted.has(name)) return ok(undefined);
-
     const track = TrackManager.getActive();
     // Exemption : meta-fichiers Conductor (spec, plan, log du track actif)
     const targetPath = typeof args?.path === 'string' ? args.path : '';
@@ -210,7 +212,6 @@ export class ToolExecutor {
         return ok(undefined);
       }
     }
-
     if (track && !track.validated && dangerous.has(name)) {
       return err(new ImaraError(ErrorCategory.CONDUCTOR, 'TRACK_NOT_VALIDATED', `BARRIÈRE CONDUCTOR : "${name}" bloqué — plan du track non validé.`));
     }

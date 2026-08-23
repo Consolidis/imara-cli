@@ -3,6 +3,7 @@ export interface IndexedDocument {
   content: string;
   lastModified: number;
   symbols: SymbolEntry[];
+  dependencies: string[];
 }
 
 export interface SymbolEntry {
@@ -12,12 +13,15 @@ export interface SymbolEntry {
   column: number;
 }
 
+export type MatchType = 'DEFINITION' | 'USAGE' | 'IMPORT' | 'TEXTE';
+
 export interface SearchResult {
   path: string;
   line: number;
   symbol?: string;
   type?: string;
   score: number;
+  matchType?: MatchType;
 }
 
 export interface InvertedIndex {

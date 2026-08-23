@@ -164,6 +164,7 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         console.log(chalk.hex(theme.primary).bold('\n  COMMANDES DISPONIBLES :'));
         console.log(`    ${chalk.hex(theme.secondary)('/track')}        : Voir l\'etat du track Conductor actif`);
         console.log(`    ${chalk.hex(theme.secondary)('/track state')}    : Interface interactive d\'exploration des tracks`);
+        console.log(`    ${chalk.hex(theme.secondary)('/track search <sujet>')} : Chercher un sujet dans les archives de tracks`);
         console.log(`    ${chalk.hex(theme.secondary)('/security audit')} : Lancer un audit de securite du code`);
         console.log(`    ${chalk.hex(theme.secondary)('/approve')}        : Valider le plan (debloquer le codage)`);
         console.log(`    ${chalk.hex(theme.secondary)('/archive')}      : Terminer et archiver le track`);
@@ -359,6 +360,7 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         console.log(chalk.hex(theme.primary).bold('\n  COMMANDES DU CHAT :'));
         console.log(`    ${chalk.hex(theme.secondary)('/track')}        : Voir l'état du track Conductor actif`);
         console.log(`    ${chalk.hex(theme.secondary)('/track state')}    : Interface interactive d'exploration des tracks`);
+        console.log(`    ${chalk.hex(theme.secondary)('/track search <sujet>')} : Chercher un sujet dans les archives de tracks`);
         console.log(`    ${chalk.hex(theme.secondary)('/security audit')} : Lancer un audit de securite du code`);
         console.log(`    ${chalk.hex(theme.secondary)('/approve')}        : Valider le plan (débloquer le codage)`);
         console.log(`    ${chalk.hex(theme.secondary)('/archive')}      : Terminer et archiver le track`);
@@ -400,6 +402,20 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         rl.pause();
         await showTrackStateMenu();
         rl.resume();
+        rl.prompt();
+        return;
+      }
+      if (input.startsWith('/track search')) {
+        const sujet = input.replace('/track search', '').trim();
+        const { searchConductorArchives, formatConductorSearchResults } = require('../../utils/conductor-search');
+        if (!sujet) {
+          console.log(chalk.hex(theme.muted)('\n  Usage : /track search <sujet> (ex: /track search accent)\n'));
+        } else {
+          console.log('');
+          const hits = searchConductorArchives(sujet, 6);
+          console.log(formatConductorSearchResults(sujet, hits));
+          console.log('');
+        }
         rl.prompt();
         return;
       }
