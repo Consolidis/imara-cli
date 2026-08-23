@@ -1,7 +1,6 @@
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
-import { mkdirSync } from 'fs';
 
 export interface ConfigSchema {
   apiKey: string;
@@ -62,8 +61,39 @@ export const DEFAULT_CONFIG: ConfigSchema = {
 export class ConfigManager {
   static _cache: ConfigSchema | null = null;
 
+  /**
+   * Répertoire racine de la configuration.
+   * IMARA_CONFIG_DIR permet de rediriger le home (CI, tests, isolation).
+   */
+  private static getConfigDir(): string {
+    const override = process.env.IMARA_CONFIG_DIR?.trim();
+    if (override) return override;
+    return homedir();
+  }
+
   private static getPath(): string {
-    return join(homedir(), '.imara', 'config.json');
+    return join(this.getConfigDir(), '.imara', 'config.json');
+  }
+
+  /** Relit l'état réel du fichier depuis le disque, sans passer par le cache mémoire. */
+  private static readFromDisk(): ConfigSchema {
+    const path = this.getPath();
+    if (!existsSync(path)) return { ...DEFAULT_CONFIG };
+    try {
+      const raw = JSON.parse(readFileSync(path, 'utf-8'));
+      return { ...DEFAULT_CONFIG, ...raw };
+    } catch {
+      return { ...DEFAULT_CONFIG };
+    }
+  }
+
+  /**
+   * Invalide le cache mémoire et recharge la configuration depuis le disque.
+   * À appeler avant de lire une valeur qui peut avoir été modifiée par un
+   * autre processus (ex: `imara config set ...` lancé en parallèle).
+   */
+  static refresh(): void {
+    this._cache = this.readFromDisk();
   }
 
   static isFirstLaunch(): boolean {
@@ -74,17 +104,7 @@ export class ConfigManager {
 
   static get(): ConfigSchema {
     if (this._cache) return this._cache;
-    const path = this.getPath();
-    if (!existsSync(path)) {
-      this._cache = { ...DEFAULT_CONFIG };
-      return this._cache;
-    }
-    try {
-      const raw = JSON.parse(readFileSync(path, 'utf-8'));
-      this._cache = { ...DEFAULT_CONFIG, ...raw };
-    } catch {
-      this._cache = { ...DEFAULT_CONFIG };
-    }
+    this._cache = this.readFromDisk();
     return this._cache!;
   }
 
@@ -92,8 +112,14 @@ export class ConfigManager {
     return this.get()[key];
   }
 
+  /**
+   * Écrit une mise à jour de configuration.
+   * IMPORTANT : fusion read-modify-write depuis le DISQUE (et non depuis le
+   * cache mémoire), pour ne jamais écraser des écritures concurrentes
+   * provenant d'autres processus (perte d'écriture évitée).
+   */
   static set(partial: Partial<ConfigSchema>): void {
-    const current = this.get();
+    const current = this.readFromDisk();
     const updated = { ...current, ...partial };
     this._cache = updated;
     const path = this.getPath();

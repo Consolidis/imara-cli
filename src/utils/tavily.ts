@@ -29,8 +29,12 @@ export async function getTavilyKey(): Promise<string | null> {
   const fromEnv = process.env.TAVILY_API_KEY?.trim();
   if (fromEnv) return fromEnv;
 
-  // 2. Config CLI
+  // 2. Config CLI — recharger depuis le disque à chaque appel pour voir les
+  //    écritures externes (ex: `imara config set tavilyApiKey ...` lancé
+  //    pendant la session). Sans refresh(), le cache mémoire statique de
+  //    ConfigManager resterait figé et la clé serait invisible.
   try {
+    ConfigManager.refresh();
     const fromConfig = ConfigManager.getRaw('tavilyApiKey')?.trim();
     if (fromConfig) return fromConfig;
   } catch {
