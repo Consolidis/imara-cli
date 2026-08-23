@@ -91,6 +91,32 @@ export function isRetriableError(error: unknown, config: Required<RetryConfig> =
  * If a signal is provided and aborted, execution stops immediately WITHOUT retrying:
  * the user's cancellation must never be treated as a retriable condition.
  */
+/**
+ * Attend `ms` millisecondes, mais s'interrompt IMMEDIATEMENT si le signal
+ * d'annulation est déclenché pendant l'attente. Sans cette garde, un appui
+ * sur ESC pendant un délai de retry (5s constant) laisserait l'agent
+ * "travailler" jusqu'à la fin du délai avant de réagir.
+ */
+function waitWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+  if (signal.aborted) {
+    return Promise.reject(new DOMException('The operation was aborted.', 'AbortError'));
+  }
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException('The operation was aborted.', 'AbortError'));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 export async function executeWithRetry<T>(
   fn: () => Promise<T>,
   config: RetryConfig = {}): Promise<T> {
@@ -137,7 +163,7 @@ export async function executeWithRetry<T>(
           finalConfig.onRetry(error, attempt, delayMs);
         } catch { /* ignore callback errors */ }
       }
-      await new Promise(resolve => setTimeout(resolve, delayMs));
+      await waitWithSignal(delayMs, signal);
     }
   }
   throw lastError;

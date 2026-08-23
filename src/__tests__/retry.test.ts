@@ -110,3 +110,23 @@ describe('Retry Utility', () => {
     });
   });
 });
+    it('annule immediatement le delai de retry quand le signal est aborted pendant l attente', async () => {
+      const controller = new AbortController();
+      const fn = vi.fn()
+        .mockRejectedValueOnce(new Error('503 Service Unavailable'))
+        .mockResolvedValueOnce('never reached');
+      const start = Date.now();
+      const promise = executeWithRetry(fn, {
+        maxRetries: 5,
+        baseDelayMs: 10000,
+        constant: true,
+        signal: controller.signal,
+      });
+      // La 1ere tentative echoue -> on entre dans le delai de 10s
+      await vi.waitFor(() => expect(fn).toHaveBeenCalledTimes(1));
+      controller.abort();
+      // L'annulation doit sortir immediatement, sans attendre les 10s
+      await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+      expect(Date.now() - start).toBeLessThan(5000);
+      expect(fn).toHaveBeenCalledTimes(1); // aucune nouvelle tentative
+    });

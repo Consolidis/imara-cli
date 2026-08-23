@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Agent } from '../agent/agent';
 import { ImaraClient } from '../api/imara-client';
 import { Keychain } from '../auth/keychain';
+import { ContextBuilder } from '../context/context-builder';
 
 vi.mock('../api/imara-client');
 vi.mock('../auth/keychain');
@@ -102,5 +103,25 @@ describe('Agent', () => {
     await expect(runPromise).resolves.toBeUndefined();
     expect(mockChat).toHaveBeenCalledTimes(1); // aucune relance apres annulation
     expect(agent.getSessionStats().messages).toBe(3); // historique conserve (2 system + 1 user)
+  });
+
+  it('should NOT start the loop when cancel() is called during initialization (context build)', async () => {
+    let resolveContext: (v: string) => void = () => {};
+    vi.mocked(ContextBuilder.buildDynamicContext)
+      .mockImplementationOnce(() => new Promise<string>(res => { resolveContext = res; }));
+    const mockChat = vi.fn().mockResolvedValue({
+      content: 'should never run',
+      finishReason: 'stop',
+      usage: { totalTokens: 10, costFcfa: 0.1 },
+    });
+    vi.mocked(ImaraClient).prototype.chat = mockChat;
+    const agent = new Agent();
+    const runPromise = agent.run('test init cancel');
+    // Annuler pendant le build du contexte dynamique
+    agent.cancel();
+    resolveContext('DYNAMIC: late context');
+    // run() doit sortir proprement sans lancer la boucle d'execution
+    await expect(runPromise).resolves.toBeUndefined();
+    expect(mockChat).not.toHaveBeenCalled();
   });
 });

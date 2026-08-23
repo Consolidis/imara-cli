@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { networkEvents } from './events';
+import { isAbortError } from './abort';
 
 export type CircuitBreakerState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
@@ -190,6 +191,12 @@ export class CircuitBreaker {
       this.recordSuccess();
       return result;
     } catch (error) {
+      // Une annulation utilisateur (ESC/Ctrl+C) n'est PAS un echec du service :
+      // elle ne doit ni compter vers l'ouverture du breaker, ni le faire
+      // basculer en HALF_OPEN/OPEN.
+      if (isAbortError(error)) {
+        throw error;
+      }
       this.recordFailure();
       throw error;
     }

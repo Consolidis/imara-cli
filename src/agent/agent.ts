@@ -90,27 +90,38 @@ export class Agent {
   }
 
   async run(prompt: string): Promise<void> {
-    if (!this.client) {
-      const apiKey = await Keychain.get();
-      if (!apiKey && !process.env.IMARA_API_KEY) {
-        throw new Error('Non authentifié. Lancez `imara login`.');
-      }
-      this.client = new ImaraClient(apiKey || '');
-    }
-    if (this.messages.length === 0) {
-      // messages[0] = STATIC system prompt (ne change jamais en session)
-      // messages[1] = DYNAMIC context (git status, projet, track)
-      const staticPrompt = ContextBuilder.buildStaticSystemPrompt();
-      const dynamicContext = this.preloadedSystemPrompt
-        ? this.preloadedSystemPrompt
-        : await ContextBuilder.buildDynamicContext(this.options);
-      this.messages.push({ role: 'system', content: staticPrompt });
-      this.messages.push({ role: 'system', content: dynamicContext });
-      this.dynamicContextDirty = false;
-    }
-    this.messages.push({ role: 'user', content: prompt });
+    // Reset en TOUT DEBUT : une annulation faite pendant l'initialisation
+    // (Keychain.get, buildDynamicContext) ne doit pas etre avalee par un
+    // reset tardif juste avant la boucle d'execution.
     this.resetCancellation();
     try {
+      if (!this.client) {
+        const apiKey = await Keychain.get();
+        if (!apiKey && !process.env.IMARA_API_KEY) {
+          throw new Error('Non authentifié. Lancez `imara login`.');
+        }
+        this.client = new ImaraClient(apiKey || '');
+      }
+      // L'utilisateur a annule pendant l'authentification : arret immediat.
+      if (this.cancelled) {
+        throw new AgentCancelledError();
+      }
+      if (this.messages.length === 0) {
+        // messages[0] = STATIC system prompt (ne change jamais en session)
+        // messages[1] = DYNAMIC context (git status, projet, track)
+        const staticPrompt = ContextBuilder.buildStaticSystemPrompt();
+        const dynamicContext = this.preloadedSystemPrompt
+          ? this.preloadedSystemPrompt
+          : await ContextBuilder.buildDynamicContext(this.options);
+        this.messages.push({ role: 'system', content: staticPrompt });
+        this.messages.push({ role: 'system', content: dynamicContext });
+        this.dynamicContextDirty = false;
+      }
+      // L'utilisateur a annule pendant la construction du contexte : arret immediat.
+      if (this.cancelled) {
+        throw new AgentCancelledError();
+      }
+      this.messages.push({ role: 'user', content: prompt });
       await this.runLoop();
     } catch (error) {
       if (this.cancelled ||
@@ -224,6 +235,11 @@ export class Agent {
           continue;
         }
         if (response.content) {
+          // Arret immediat : ne pas afficher de reponse apres une annulation
+          // (la requete a pu aboutir juste avant l'appui sur ESC).
+          if (this.cancelled || this.paused) {
+            throw new AgentCancelledError();
+          }
           this.messages.push({ role: 'assistant', content: response.content, reasoning: response.reasoning });
           showResponse(response.content);
         }

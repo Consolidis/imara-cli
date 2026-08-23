@@ -3,6 +3,7 @@ import { TOOLS_DEFINITIONS } from '../agent/tools';
 import { getApiUrl, getApiKey, getDebugMode } from '../utils/env';
 import { fetchWithTimeout } from '../utils/fetch-with-timeout';
 import { executeWithRetry } from '../utils/retry';
+import { isAbortError } from '../utils/abort';
 import { CircuitBreaker } from '../utils/circuit-breaker';
 import { CacheManager } from '../cache/cache-manager';
 import { computeContextHash } from '../utils/cache';
@@ -245,6 +246,12 @@ export class ImaraClient {
       this.cache.set(cacheKey, data);
       return data;
     } catch (error) {
+      // L'annulation utilisateur (ESC/Ctrl+C) ne doit JAMAIS etre masquee
+      // par le fallback cache : l'agent doit s'arreter, pas repondre depuis
+      // le cache comme si l'interruption n'avait pas eu lieu.
+      if (isAbortError(error)) {
+        throw error;
+      }
       // Fallback to cache offline
       const cachedResponse = this.cache.get(cacheKey);
       if (cachedResponse) {

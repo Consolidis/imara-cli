@@ -78,3 +78,30 @@ describe('Client Resilience & Cache Fallback', () => {
     expect(res.content).toBe('I will list the directory first.');
   });
 });
+  it('should NOT fallback to cache when the error is a user cancellation (AbortError)', async () => {
+    const client = new ImaraClient('test-key');
+    const messages: Message[] = [{ role: 'user', content: 'annulation query' }];
+    const fakeResponse = {
+      content: 'cached response',
+      usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10, costFcfa: 0.1 },
+    };
+    // 1. Populate cache with a successful response
+    vi.spyOn(fetchModule, 'fetchWithTimeout')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => fakeResponse,
+      } as Response)
+      // 2. Next call: user cancels while the request is in flight
+      .mockRejectedValueOnce(new DOMException('The operation was aborted.', 'AbortError'));
+
+    const successRes = await client.chat(messages, { model: 'flash', maxTokens: 100 });
+    expect(successRes.content).toBe('cached response');
+
+    // The cancellation MUST propagate as an AbortError — it must NEVER be
+    // swallowed by the offline cache fallback (the agent would keep working).
+    await expect(
+      client.chat(messages, { model: 'flash', maxTokens: 100 })
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    (client as any).cache.clear();
+  });

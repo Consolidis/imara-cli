@@ -117,4 +117,15 @@ describe('Circuit Breaker', () => {
     expect(cb2.getState()).toBe('OPEN');
     expect(cb2.isOpen()).toBe(true);
   });
+  it('should NOT count user cancellation (AbortError) as a service failure', async () => {
+    // Le seuil est 3 : deux annulations ne doivent pas tripper le breaker.
+    await expect(
+      cb.execute(async () => { throw new DOMException('The operation was aborted.', 'AbortError'); })
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(
+      cb.execute(async () => { throw new DOMException('The operation was aborted.', 'AbortError'); })
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(cb.getState()).toBe('CLOSED');
+    expect(cb.isOpen()).toBe(false);
+  });
 });
