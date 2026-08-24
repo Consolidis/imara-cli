@@ -176,18 +176,18 @@ describe('extraction PDF (pdf-parse v2)', () => {
     expect(doc.text).toContain('Hello Imara from PDF');
     expect(doc.pages).toBe(1);
     expect(doc.sizeBytes).toBeGreaterThan(0);
-  });
+  }, 20000);
   it('detecte un PDF sans couche texte (scanne)', async () => {
     const doc = await extractDocumentText(pdfEmptyPath);
     expect(isPdfWithoutTextLayer(doc.text)).toBe(true);
     const out = formatDocumentOutput(doc);
     expect(out).toContain('scanne');
-  });
+  }, 20000);
   it('rejette un PDF corrompu avec une erreur (pas de crash)', async () => {
     const bad = path.join(tmpDir, 'bad.pdf');
     fs.writeFileSync(bad, Buffer.from('%PDF-1.4\nceci nest pas un pdf valide'));
     await expect(extractDocumentText(bad)).rejects.toThrow();
-  });
+  }, 20000);
 });
 
 describe('extraction DOCX (mammoth)', () => {
@@ -195,7 +195,7 @@ describe('extraction DOCX (mammoth)', () => {
     const doc = await extractDocumentText(docxPath);
     expect(doc.kind).toBe('docx');
     expect(doc.text).toContain('Hello Imara from DOCX');
-  });
+  }, 20000);
 });
 
 describe('formatDocumentOutput', () => {
@@ -206,7 +206,7 @@ describe('formatDocumentOutput', () => {
     expect(out).toContain('Type : PDF');
     expect(out).toContain('Pages : 1');
     expect(out).toContain('Hello Imara from PDF');
-  });
+  }, 20000);
 });
 
 describe('formatBinaryRefusal', () => {

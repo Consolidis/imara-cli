@@ -35,7 +35,15 @@ export function readFileHeader(filePath: string, bytes = 512): Buffer {
   try {
     const buf = Buffer.alloc(bytes);
     const read = fs.readSync(fd, buf, 0, bytes, 0);
-    return buf.subarray(0, read);
+    // Lecture invalide (0 octet, ou undefined sous mock) : retourner un buffer
+    // VIDE plutot qu'un buffer de zeros — un buffer de zeros serait classe
+    // 'binary' par detectDocumentKind et bloquerait la lecture de fichiers texte.
+    // Un buffer vide est classe 'text' : le lecteur retombera sur fs.readFileSync
+    // pour recuperer le contenu reel.
+    if (typeof read !== 'number' || Number.isNaN(read) || read <= 0) {
+      return Buffer.alloc(0);
+    }
+    return buf.subarray(0, Math.min(read, bytes));
   } finally {
     fs.closeSync(fd);
   }
