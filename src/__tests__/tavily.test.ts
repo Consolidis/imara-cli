@@ -54,13 +54,15 @@ describe('search-cache', () => {
     });
 
     it('eviction FIFO a 200 entrees', () => {
+      // Note : chaque set reecrit le fichier JSON complet ; sur Windows avec
+      // antivirus, 210 writes peuvent depasser le timeout par defaut (5s).
       for (let i = 0; i < 210; i++) {
         setCachedSearch(`requete-${i}`, `resultat-${i}`);
       }
       // Les plus anciennes (0-9) doivent etre evincees
       expect(getCachedSearch('requete-0')).toBeNull();
       expect(getCachedSearch('requete-209')).toBe('resultat-209');
-    });
+    }, 30000);
 
     it('fichier corrompu -> purge silencieuse', () => {
       // Ecrire un fichier JSON invalide

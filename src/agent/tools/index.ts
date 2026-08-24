@@ -34,6 +34,9 @@ import { ValidateFileTool } from './validate-file.tool';
 import { InvestigateFileTool } from './investigate-file.tool';
 import { InvestigateProjectTool } from './investigate-project.tool';
 import { ConductorSearchArchivesTool } from './conductor-search-archives.tool';
+import { VerifyTool } from './verify.tool';
+import { snapshotBefore } from '../../utils/file-snapshot';
+import { runHooks } from '../../utils/hooks';
 
 // Outils "purs" (lecture seule) dont les resultats sont mis en cache (TTL 30s)
 const CACHED_TOOLS = new Set([
@@ -56,7 +59,8 @@ export const TOOLS_DEFINITIONS: ToolDefinition[] = [
   ValidateFileTool.definition,
   InvestigateFileTool.definition,
   InvestigateProjectTool.definition,
-  ConductorSearchArchivesTool.definition];
+  ConductorSearchArchivesTool.definition,
+  VerifyTool.definition];
 
 export class ToolExecutor {
   static async execute(name: string, args: ToolArguments, agent?: AgentProxy): Promise<Result<string, ImaraError>> {
@@ -72,6 +76,23 @@ export class ToolExecutor {
     }
     try {
       let result: string;
+      // Checkpoints fichiers : snapshot AVANT chaque ecriture + hooks before_write
+      const writeTools = new Set(['write_file', 'append_file', 'replace_in_file', 'batch_replace', 'atomic_section_replace']);
+      let writePath: string | undefined;
+      if (writeTools.has(name) && args && typeof (args as any).path === 'string') {
+        const targetPath = (args as any).path as string;
+        writePath = targetPath;
+        try {
+          snapshotBefore(targetPath);
+        } catch (snapErr) {
+          const snapMsg = snapErr instanceof Error ? snapErr.message : String(snapErr);
+          return err(new ImaraError(ErrorCategory.SECURITY, 'SNAPSHOT_FAILED', `Snapshot refuse : ${snapMsg}`));
+        }
+        const beforeHooks = await runHooks('before_write', { file: targetPath });
+        if (!beforeHooks.ok) {
+          return err(new ImaraError(ErrorCategory.SECURITY, 'HOOK_BLOCKED', `Hook before_write bloque l'action : ${beforeHooks.output}`));
+        }
+      }
       switch (name) {
         case 'read_file':
           result = await ReadFileTool.run(args as { path: string });
@@ -148,9 +169,18 @@ export class ToolExecutor {
         case 'project_summary':
           result = await ProjectSummaryTool.run(args as { forceRefresh?: boolean });
           break;
-        case 'git_commit':
+        case 'git_commit': {
+          const beforeCommit = await runHooks('before_commit', {});
+          if (!beforeCommit.ok) {
+            return err(new ImaraError(ErrorCategory.SECURITY, 'HOOK_BLOCKED', `Hook before_commit bloque : ${beforeCommit.output}`));
+          }
           result = await GitCommitTool.run(args as { message: string; files?: string[]; all?: boolean });
+          const afterCommit = await runHooks('after_commit', {});
+          if (afterCommit.output) {
+            result += '\n' + afterCommit.output;
+          }
           break;
+        }
         case 'atomic_section_replace':
           result = await AtomicSectionReplaceTool.run(args as { path: string; start_marker: string; end_marker: string; new_content: string; inclusive?: boolean });
           toolCache.invalidatePath((args as { path: string }).path);
@@ -170,8 +200,18 @@ export class ToolExecutor {
         case 'conductor_search_archives':
           result = await ConductorSearchArchivesTool.run(args as { query: string; max_results?: number });
           break;
+        case 'verify':
+          result = await VerifyTool.run();
+          break;
         default:
           return err(new ImaraError(ErrorCategory.UNKNOWN, 'TOOL_UNKNOWN', `Tool inconnu: ${name}`));
+      }
+      // Hooks after_write
+      if (writePath) {
+        const afterHooks = await runHooks('after_write', { file: writePath });
+        if (afterHooks.output) {
+          result += '\n' + afterHooks.output;
+        }
       }
       // Auto-validation post-ecriture (activee via env IMARA_AUTO_VALIDATE=1)
       if (process.env.IMARA_AUTO_VALIDATE === '1' || process.env.IMARA_AUTO_VALIDATE === 'true') {

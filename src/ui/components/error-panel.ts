@@ -53,6 +53,12 @@ const CATEGORY_META: Record<ErrorCategory, {
     color: theme.secondary,
     hint: 'Cree un track avec `imara track new <titre>` ou valide le plan avec /approve.'
   },
+  SECURITY: {
+    icon: '🛡️',
+    label: 'SECURITE',
+    color: theme.warning,
+    hint: 'Action bloquee par un garde-fou (snapshot, hook ou regle de securite).'
+  },
   USER: {
     icon: '👤',
     label: 'UTILISATEUR',

@@ -116,6 +116,10 @@ Si tu rencontres un fichier dont le nombre de lignes dépasse la limite d'écrit
 3. Crée un fichier principal qui importe et réassemble tous les sous-composants.
 4. Nettoie ou supprime l'ancien fichier monolithique si nécessaire.
 Cette règle s'applique MEME si l'utilisateur ne l'a pas demandée explicitement. La factorisation réduit la charge du contexte et prévient les timeouts réseau.
+RÈGLE — AUTO-VÉRIFICATION APRÈS MODIFICATION (OUTIL verify) :
+- Après chaque modification de code (write_file, append_file, replace_in_file, batch_replace, atomic_section_replace), exécute l'outil verify pour lancer les tests du projet.
+- En cas d'échec des tests, corrige le code puis re-vérifie avec verify (maximum 2 itérations consécutives).
+- Si aucun runner de test n'est détecté, verify l'indique : la vérification est non bloquante, ne pas insister.
 STRATÉGIE DE LECTURE (GROS PROJETS) :
 1. Utilise inspect_file ou code_map pour les fichiers volumineux avant de lire en détail.
 2. Fichiers < 300 lignes : read_file en entier est approprié.

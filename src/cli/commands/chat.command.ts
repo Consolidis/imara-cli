@@ -17,6 +17,8 @@ import { isNativeModel } from '../../utils/model';
 import { Keychain } from '../../auth/keychain';
 import { startBrowserServer, stopBrowserServer, isBrowserServerRunning, getBrowserServerUrl } from '../../server/index';
 import { BrowserAgentBridge } from '../../server/browser-agent';
+import { rollbackLast } from '../../utils/file-snapshot';
+import { resolveCustomCommand } from '../../utils/slash-commands';
 
 interface ChatOptions {
   model?: string;
@@ -369,6 +371,7 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         console.log(`    ${chalk.hex(theme.secondary)('/model <id>')}   : Changer de modèle (flash, standard, zuri)`);
         console.log(`    ${chalk.hex(theme.secondary)('/save [name]')}   : Sauvegarder la session`);
         console.log(`    ${chalk.hex(theme.secondary)('/checkpoint')}     : Créer un checkpoint de session`);
+        console.log(`    ${chalk.hex(theme.secondary)('/rollback')}      : Restaurer le dernier fichier modifié (snapshot)`);
         console.log(`    ${chalk.hex(theme.secondary)('/clear')}        : Effacer l'historique`);
         console.log(`    ${chalk.hex(theme.secondary)('/welcome')}      : Rejouer le tutoriel interactif`);
         console.log(`    ${chalk.hex(theme.secondary)('/setup')}        : Relancer la configuration initiale`);
@@ -382,6 +385,10 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         console.log(`    4. ${chalk.bold('Execution')} : Codage par itérations raisonnables (sections modulaires).\n`);
 
         console.log(chalk.hex(theme.primary).bold('  ASTUCE :'));
+        console.log(chalk.hex(theme.primary).bold('  COMMANDES PERSONNALISÉES :'));
+        console.log('    Définissez des commandes /<nom> dans ~/.imara/commands.json ou .imara/commands.json :');
+        console.log('    Format : [{"name": "review", "prompt": "Fais une revue rapide du code : {args}", "model": "flash"}]');
+        console.log('');
         console.log('    Si l\'IA est bloquée par un guardrail, validez simplement le plan en disant :');
         console.log(`    ${chalk.hex(theme.accent)('"Le plan est validé, tu peux commencer à coder."')}\n`);
         
@@ -632,6 +639,27 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         return;
       }
 
+      if (input === '/rollback') {
+        let snap: { filePath: string; existed: boolean; size: number; deleted: boolean } | null = null;
+        try {
+          snap = rollbackLast();
+        } catch (rbErr) {
+          console.log(chalk.hex(theme.warning)(`\n  ⚠ Erreur rollback : ${rbErr instanceof Error ? rbErr.message : String(rbErr)}\n`));
+          rl.prompt();
+          return;
+        }
+        if (!snap) {
+          console.log(chalk.hex(theme.muted)('\n  Aucun snapshot disponible. Modifiez d\'abord un fichier avec l\'agent.\n'));
+        } else {
+          const detail = snap.existed
+            ? `restauré (${snap.size} octets)`
+            : `supprimé (fichier créé par la modification)`;
+          console.log(chalk.hex(theme.accent)(`\n  ✓ Dernier fichier ${detail} :`));
+          console.log(`    ${chalk.hex(theme.text)(snap.filePath)}\n`);
+        }
+        rl.prompt();
+        return;
+      }
       if (input === '/sessions') {
         const sessions = store.listSessions(process.cwd());
         console.log(chalk.hex(theme.primary).bold('\n  🤖 SESSIONS HISTORIQUES (Dossier courant) :'));
@@ -753,6 +781,51 @@ export async function chatCommand(options: ChatOptions, initialPrompt?: string) 
         return;
       }
 
+      // Slash commands personnalisées (~/.imara/commands.json ou .imara/commands.json)
+      if (input.startsWith('/')) {
+        let custom: { prompt: string } | null = null;
+        try {
+          custom = resolveCustomCommand(input);
+        } catch (cmdErr) {
+          console.log(chalk.hex(theme.warning)(`\n  ⚠ ${cmdErr instanceof Error ? cmdErr.message : String(cmdErr)}\n`));
+          rl.prompt();
+          return;
+        }
+        if (custom) {
+          isProcessing = true;
+          setStatusBarPinned(false);
+          try {
+            rl.pause();
+            process.stdin.resume();
+            await agent.run(custom.prompt);
+            if (!currentSessionId) {
+              const defaultName = `session_${new Date().toLocaleDateString('fr-FR').replace(/\//g, '-')}_${Date.now().toString().slice(-4)}`;
+              const session = store.createSession(defaultName, process.cwd());
+              if (session) {
+                currentSessionId = session.id;
+                store.activateSession(session.id);
+              }
+            }
+            if (currentSessionId) {
+              store.saveMessages(currentSessionId, agent.getMessages());
+            }
+          } catch (error) {
+            if (error instanceof Error) {
+              showErrorPanel(error);
+            } else {
+              console.error(chalk.red(`\nErreur: ${error}`));
+            }
+          } finally {
+            isProcessing = false;
+            if (process.stdin.isPaused()) {
+              process.stdin.resume();
+            }
+            rl.resume();
+          }
+          rl.prompt();
+          return;
+        }
+      }
       // Guardrail: Intercept all unknown slash commands to avoid sending them to the agent
       if (input.startsWith('/')) {
         console.log(chalk.hex(theme.warning)(`\n  Commande inconnue : "${input}". Saisissez /help pour voir les commandes disponibles.\n`));

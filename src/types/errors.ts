@@ -6,6 +6,7 @@ export enum ErrorCategory {
   AUTH = 'AUTH',
   NETWORK = 'NETWORK',
   CONDUCTOR = 'CONDUCTOR',
+  SECURITY = 'SECURITY',
   USER = 'USER',
   UNKNOWN = 'UNKNOWN',
 }
