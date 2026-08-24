@@ -85,6 +85,21 @@ export class UnauthorizedError extends LlmError {
     });
     this.name = 'UnauthorizedError';
   }
+}export class PayloadLimitError extends LlmError {
+  readonly payloadKB: number;
+  readonly maxKB: number;
+  constructor(payloadKB: number, maxKB: number) {
+    super(
+      'PAYLOAD_LIMIT',
+      `Le contexte réseau est trop volumineux (${Math.round(payloadKB)} Ko, seuil ${maxKB} Ko). ` +
+        `L'agent s'est arrêté pour éviter un échec de transmission. ` +
+        `Tapez /clear pour alléger la conversation, ou /clear-history pour repartir de zéro.`,
+      { isRecoverable: true }
+    );
+    this.name = 'PayloadLimitError';
+    this.payloadKB = payloadKB;
+    this.maxKB = maxKB;
+  }
 }
 
 // --- File System errors ---------------------------------------------

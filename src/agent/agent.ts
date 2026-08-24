@@ -14,9 +14,10 @@ import { ConfigManager } from '../config';
 import { getAutoConfirm } from '../utils/env';
 import chalk from 'chalk';
 import { theme } from '../ui/theme';
-import { fromUnknown, ImaraError } from '../types/errors';
+import { fromUnknown, ImaraError, PayloadLimitError } from '../types/errors';
 import { Result } from '../types/result';
 import { sanitizeUserErrorMessage } from '../utils/sanitize-errors';
+import { computePayloadState, estimatePayloadKB, getPayloadThresholds, shrinkPayloadForBudget } from '../utils/payload-guard';
 
 // Deplace vers src/utils/sanitize-errors.ts (utilise via showErrorPanel)
 // Cette fonction privée est conservee par compatibilite mais delgue.
@@ -181,6 +182,35 @@ export class Agent {
         }
       }
 
+      // GESTION DU POIDS DE PAYLOAD : auto-allègement AVANT l'envoi réseau,
+      // arrêt GRACIEUX en dernier recours (jamais de throw brutal en plein travail).
+      const payloadState = computePayloadState(this.messages);
+      if (payloadState.state !== 'ok') {
+        const { warnKB, maxKB } = getPayloadThresholds();
+        // Budget cible : 75% du seuil d'alerte pour laisser une marge de sécurité.
+        const budgetKB = Math.max(50, Math.round(warnKB * 0.75));
+        const shrinkResult = shrinkPayloadForBudget(this.messages, budgetKB);
+        if (shrinkResult.freedKB > 0) {
+          this.messages = shrinkResult.messages;
+          process.stdout.write(
+            chalk.hex(theme.muted)(`\n  · contexte réseau allégé (−${shrinkResult.freedKB.toFixed(1)} Ko)\n`)
+          );
+        }
+        // En état 'critical' : tenter une compaction légère (conversation ancienne
+        // volumineuse) avant de lever l'erreur d'arrêt gracieux.
+        if (computePayloadState(this.messages).state === 'critical') {
+          const beforeStats = this.contextWindow.getStats(this.messages);
+          const compacted = this.contextWindow.compact(this.messages);
+          const afterStats = this.contextWindow.getStats(this.messages);
+          if (afterStats.totalTokens < beforeStats.totalTokens) {
+            this.messages = compacted;
+          }
+          const afterCompact = computePayloadState(this.messages);
+          if (afterCompact.state === 'critical') {
+            throw new PayloadLimitError(afterCompact.sizeKB, maxKB);
+          }
+        }
+      }
       uiEvents.setPhase('thinking');
       try {
         // Dynamic Context Refresh: regenerer UNIQUEMENT le bloc DYNAMIC (messages[1])

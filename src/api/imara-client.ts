@@ -12,6 +12,8 @@ import { homedir } from 'os';
 import chalk from 'chalk';
 import { isNativeModel } from '../utils/model';
 import { Keychain } from '../auth/keychain';
+import { getPayloadThresholds } from '../utils/payload-guard';
+import { PayloadLimitError } from '../types/errors';
 import { containsTechnicalDetails, sanitizeUserErrorMessage } from '../utils/sanitize-errors';
 
 function sanitizeForJson(value: string): string {
@@ -106,14 +108,13 @@ export class ImaraClient {
           }
           const payloadStr = JSON.stringify(payload);
           const payloadSizeKB = Math.round(payloadStr.length / 1024);
-          // Seuils progressifs : warning a 600 KB, blocage a 1 MB
-          const WARN_PAYLOAD_KB = 600;
-          const MAX_PAYLOAD_KB = 1000;
-          if (payloadSizeKB > WARN_PAYLOAD_KB && payloadSizeKB <= MAX_PAYLOAD_KB) {
-            process.stderr.write(`\x1b[33m[IMARA] Attention : payload volumineux (${payloadSizeKB} KB). La qualite des reponses pourrait etre degradee. Tapez /clear pour alleger la conversation.\x1b[0m\n`);
+          // Seuils unifiés depuis payload-guard (IMARA_PAYLOAD_WARN_KB / IMARA_PAYLOAD_MAX_KB).
+          const { warnKB, maxKB } = getPayloadThresholds();
+          if (payloadSizeKB > warnKB && payloadSizeKB <= maxKB) {
+            process.stderr.write(`\x1b[33m[IMARA] Attention : payload volumineux (${payloadSizeKB} KB). L'agent s'allège automatiquement avant l'envoi. En dernier recours, tapez /clear pour alleger la conversation.\x1b[0m\n`);
           }
-          if (payloadSizeKB > MAX_PAYLOAD_KB) {
-            throw new Error(`Le payload de la requete est trop volumineux (${payloadSizeKB} KB > ${MAX_PAYLOAD_KB} KB). Tapez /clear pour alleger la conversation.`);
+          if (payloadSizeKB > maxKB) {
+            throw new PayloadLimitError(payloadSizeKB, maxKB);
           }
 
           const headers: Record<string, string> = {
