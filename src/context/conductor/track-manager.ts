@@ -159,6 +159,9 @@ export class TrackManager {
     // plan.md
     fs.writeFileSync(path.join(dir, 'plan.md'),
       `# Plan — ${title}\n\n(L'IA va générer le plan étape par étape ici)\n`, 'utf-8');
+    // log.md (journal automatique des actions de l'agent — créé nativement)
+    fs.writeFileSync(path.join(dir, 'log.md'),
+      `# Journal — ${title}\n\n## ${now.slice(0, 10)} — Création du track\n- Track : ${id}\n- Auteur : ${author}\n`, 'utf-8');
     // Activate
     const track = { id, title, dir, validated: false };
     this.setActive(track);
