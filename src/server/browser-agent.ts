@@ -36,7 +36,7 @@ const SPINNER_CHARS = /^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏\s]*$/;
 
 function isSpinnerLine(text: string): boolean {
   if (SPINNER_CHARS.test(text)) return true;
-  if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]+\s+pense[.\s]*$/i.test(text)) return true;
+  if (/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]+\s+(pense|IMARA travaille)[.\s]*$/i.test(text)) return true;
   return false;
 }
 
