@@ -2,11 +2,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { isInsideCwd, isProtectedFile } from '../../utils/file-utils';
 import { ToolDefinition } from '../agent.types';
+import { detectDocumentKind, readFileHeader } from '../../utils/document-extractor';
 
 export class ReadFileRangeTool {
   static definition: ToolDefinition = {
     name: 'read_file_range',
-    description: 'Lit une portion specifique d\'un fichier (plage de lignes). Utile pour les grands fichiers.',
+    description: 'Lit une portion specifique d\'un fichier texte (plage de lignes). Utile pour les grands fichiers. Refuse les documents binaires (PDF, DOCX) : utilisez read_file pour extraire leur texte.',
     parameters: {
       type: 'object',
       properties: {
@@ -29,20 +30,25 @@ export class ReadFileRangeTool {
     if (!fs.existsSync(fullPath)) {
       throw new Error(`Fichier non trouve: ${args.path}`);
     }
-
+    // Refus propre des documents binaires : la notion de ligne n'a pas de sens
+    const header = readFileHeader(fullPath, 512);
+    const kind = detectDocumentKind(header, path.extname(fullPath));
+    if (kind !== 'text') {
+      throw new Error(
+        'Fichier binaire ou document (PDF/DOCX) : read_file_range inutilisable. ' +
+        'Utilisez read_file pour extraire le contenu texte du document.'
+      );
+    }
     const start = args.start_line || 1;
     const end = args.end_line;
     if (start < 1) throw new Error('start_line doit etre >= 1');
     if (end < start) throw new Error('end_line doit etre >= start_line');
-
     // Safety limit to prevent context overflow
     if (end - start > 2000) {
       throw new Error('Plage trop grande (max 2000 lignes). Veuillez lire le fichier par morceaux plus petits.');
     }
-
     const content = fs.readFileSync(fullPath, 'utf-8');
     const lines = content.split('\n');
-
     // Detection du type de line ending
     const crlfCount = (content.match(/\r\n/g) || []).length;
     const lfCount = (content.match(/[^\r]\n/g) || []).length + (content.startsWith('\n') ? 1 : 0);
@@ -52,7 +58,6 @@ export class ReadFileRangeTool {
     } else if (crlfCount > 0) {
       lineEndingType = 'CRLF';
     }
-
     const slicedLines = lines.slice(start - 1, end);
     const result = slicedLines.join('\n');
     return `--- Lines ${start} to ${Math.min(end, lines.length)} of ${args.path} (line endings: ${lineEndingType}) ---\n${result}\n--- End of range ---`;

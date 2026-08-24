@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { isInsideCwd, isProtectedFile } from '../../utils/file-utils';
+import { detectDocumentKind, extractDocumentText, formatBinaryRefusal, readFileHeader } from '../../utils/document-extractor';
 import { ToolDefinition } from '../agent.types';
 
 interface InvestigationReport {
@@ -74,6 +75,25 @@ export class InvestigateFileTool {
       throw new Error(`Erreur: ${args.path} est un dossier. Utilisez list_directory.`);
     }
 
+    // Documents binaires : delegation a l'extracteur PDF/DOCX
+    const header = readFileHeader(fullPath, 512);
+    const kind = detectDocumentKind(header, path.extname(fullPath));
+    if (kind !== 'text') {
+      if (kind === 'pdf' || kind === 'docx') {
+        const extracted = await extractDocumentText(fullPath);
+        const sizeKB = (stats.size / 1024).toFixed(2);
+        const pages = extracted.kind === 'pdf' && extracted.pages !== undefined ? `\nPages : ${extracted.pages}` : '';
+        return '=== RAPPORT D\'INVESTIGATION (DOCUMENT) ===\n' +
+          `Fichier : ${args.path}\n` +
+          `Taille : ${sizeKB} KB\n` +
+          `Type : ${extracted.kind === 'pdf' ? 'PDF' : 'Word (.docx)'}${pages}\n\n` +
+          '--- CONTENU EXTRAIT ---\n' +
+          extracted.text +
+          '\n\n--- NOTES ---\n' +
+          'Document binaire : texte extrait automatiquement. read_file retourne ce meme contenu.';
+      }
+      return formatBinaryRefusal(kind, fullPath, stats.size);
+    }
     const content = fs.readFileSync(fullPath, 'utf-8');
     const lines = content.split('\n');
     const lineCount = lines.length;

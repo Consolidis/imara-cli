@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { isInsideCwd, isProtectedFile } from '../../utils/file-utils';
+import { detectDocumentKind, extractDocumentText, formatBinaryRefusal, formatDocumentOutput, readFileHeader } from '../../utils/document-extractor';
 import { ToolDefinition } from '../agent.types';
 
 interface BracePair {
@@ -57,6 +58,16 @@ export class SmartReadTool {
     }
     if (!fs.existsSync(fullPath)) {
       throw new Error(`Fichier non trouve: ${args.path}`);
+    }
+    // Documents binaires : delegation a l'extracteur PDF/DOCX
+    const header = readFileHeader(fullPath, 512);
+    const kind = detectDocumentKind(header, path.extname(fullPath));
+    if (kind !== 'text') {
+      if (kind === 'pdf' || kind === 'docx') {
+        const extracted = await extractDocumentText(fullPath);
+        return formatDocumentOutput(extracted);
+      }
+      return formatBinaryRefusal(kind, fullPath, fs.statSync(fullPath).size);
     }
     const content = fs.readFileSync(fullPath, 'utf-8');
     const ext = path.extname(fullPath).toLowerCase();

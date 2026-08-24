@@ -2,11 +2,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { isInsideCwd, isProtectedFile } from '../../utils/file-utils';
 import { ToolDefinition } from '../agent.types';
+import { detectDocumentKind, readFileHeader } from '../../utils/document-extractor';
 
 export class InspectFileTool {
   static definition: ToolDefinition = {
     name: 'inspect_file',
-    description: 'Inspecte un fichier pour obtenir ses métadonnées (nombre de lignes, taille) et optionnellement chercher un terme pour localiser ses numéros de ligne précis.',
+    description: 'Inspecte un fichier pour obtenir ses métadonnées (nombre de lignes, taille) et optionnellement chercher un terme pour localiser ses numéros de ligne précis. Pour les documents binaires (PDF, DOCX), affiche les métadonnées sans lire le binaire.',
     parameters: {
       type: 'object',
       properties: {
@@ -19,29 +20,29 @@ export class InspectFileTool {
 
   static async run(args: { path: string, query?: string }): Promise<string> {
     const fullPath = path.resolve(process.cwd(), args.path);
-
     if (!isInsideCwd(fullPath)) {
       throw new Error('Sécurité: Accès refusé en dehors du projet.');
     }
-
     if (isProtectedFile(fullPath)) {
       throw new Error('Sécurité: Ce fichier est protégé.');
     }
-
     if (!fs.existsSync(fullPath)) {
       throw new Error(`Fichier non trouvé: ${args.path}`);
     }
-
     const stats = fs.statSync(fullPath);
     if (stats.isDirectory()) {
       throw new Error(`Erreur: ${args.path} est un dossier. Utilisez list_directory.`);
     }
-
+    // Documents binaires : métadonnées sans lecture binaire
+    const header = readFileHeader(fullPath, 512);
+    const kind = detectDocumentKind(header, path.extname(fullPath));
+    if (kind !== 'text') {
+      return InspectFileTool.buildBinaryReport(args.path, stats.size, kind);
+    }
     const content = fs.readFileSync(fullPath, 'utf-8');
     const lines = content.split('\n');
     const lineCount = lines.length;
     const sizeBytes = stats.size;
-
     // Detection du type de line ending
     const crlfCount = (content.match(/\r\n/g) || []).length;
     const lfCount = (content.match(/[^\r]\n/g) || []).length + (content.startsWith('\n') ? 1 : 0);
@@ -51,17 +52,14 @@ export class InspectFileTool {
     } else if (crlfCount > 0) {
       lineEndingType = 'CRLF';
     }
-
     let response = `=== Inspection de ${args.path} ===\n`;
     response += `Taille : ${(sizeBytes / 1024).toFixed(2)} KB (${sizeBytes} octets)\n`;
     response += `Lignes : ${lineCount} lignes\n`;
     response += `Line endings : ${lineEndingType}\n`;
-
     if (args.query) {
       const q = args.query.trim();
       response += `\n--- Recherche de "${q}" ---\n`;
       let matchCount = 0;
-      
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         if (line.includes(q)) {
@@ -73,14 +71,33 @@ export class InspectFileTool {
           response += `Ligne ${i + 1} : ${line.trim()}\n`;
         }
       }
-
       if (matchCount === 0) {
         response += `Aucune correspondance trouvée.\n`;
       } else if (matchCount <= 50) {
         response += `Total : ${matchCount} correspondance(s) trouvée(s).\n`;
       }
     }
+    response += `=== Fin d'inspection ===`;
+    return response;
+  }
 
+  /** Rapport de métadonnées pour les documents binaires (PDF, DOCX, DOC, archives). */
+  private static buildBinaryReport(filePath: string, sizeBytes: number, kind: string): string {
+    const label =
+      kind === 'pdf' ? 'PDF'
+      : kind === 'docx' ? 'Word (.docx)'
+      : kind === 'doc' ? 'Word (.doc, OLE2 binaire)'
+      : kind === 'zip' ? 'Archive ZIP'
+      : 'binaire';
+    const hint =
+      kind === 'pdf' || kind === 'docx'
+        ? 'Document binaire : le texte est lisible via read_file (extraction automatique).'
+        : 'Fichier binaire non texte : lecture directe impossible.';
+    let response = `=== Inspection de ${filePath} ===\n`;
+    response += `Type : ${label}\n`;
+    response += `Taille : ${(sizeBytes / 1024).toFixed(2)} KB (${sizeBytes} octets)\n`;
+    response += `Lignes : N/A (fichier binaire)\n`;
+    response += `\nNote : ${hint}\n`;
     response += `=== Fin d'inspection ===`;
     return response;
   }
