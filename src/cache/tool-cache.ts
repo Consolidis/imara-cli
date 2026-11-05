@@ -1,3 +1,5 @@
+import { stableSerialize } from '../utils/cache';
+
 /**
  * ToolCache — Cache LRU avec TTL pour les résultats d'outils purs (lecture seule).
  * Invalidation par path pour les outils d'écriture.
@@ -21,9 +23,7 @@ export class ToolCache {
 
   /** Construit la clé de cache à partir du nom de l'outil et des arguments */
   makeKey(toolName: string, args: Record<string, unknown>): string {
-    const path = args.path ?? args.paths ?? '';
-    const normalized = typeof path === 'string' ? path : JSON.stringify(path);
-    return `${toolName}:${normalized}`;
+    return `${toolName}:${stableSerialize(args)}`;
   }
 
   /** Récupère une entrée si elle existe et n'a pas expiré */
@@ -60,8 +60,15 @@ export class ToolCache {
     if (!path) return;
     const normalizedPath = path.replace(/\\/g, '/');
     for (const key of this.cache.keys()) {
-      const [, keyPath] = key.split(':', 2);
-      if (keyPath && keyPath.includes(normalizedPath)) {
+      const separator = key.indexOf(':');
+      const args = JSON.parse(key.slice(separator + 1)) as Record<string, unknown>;
+      const cachedPaths = args.path ?? args.paths;
+      const paths = typeof cachedPaths === 'string'
+        ? [cachedPaths]
+        : Array.isArray(cachedPaths)
+          ? cachedPaths.filter((value): value is string => typeof value === 'string')
+          : [];
+      if (paths.some(cachedPath => cachedPath.replace(/\\/g, '/').includes(normalizedPath))) {
         this.cache.delete(key);
       }
     }

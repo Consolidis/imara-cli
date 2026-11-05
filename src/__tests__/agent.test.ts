@@ -3,6 +3,8 @@ import { Agent } from '../agent/agent';
 import { ImaraClient } from '../api/imara-client';
 import { Keychain } from '../auth/keychain';
 import { ContextBuilder } from '../context/context-builder';
+import { ToolExecutor } from '../agent/tools';
+import { Message } from '../agent/agent.types';
 
 vi.mock('../api/imara-client');
 vi.mock('../auth/keychain');
@@ -69,6 +71,51 @@ describe('Agent', () => {
 
     expect(mockChat).toHaveBeenCalledTimes(2);
     expect(agent.getSessionStats().tokens).toBe(30);
+  });
+
+  it('should append refreshed project context without changing the cached prompt prefix', async () => {
+    vi.mocked(ContextBuilder.buildDynamicContext)
+      .mockResolvedValueOnce('DYNAMIC: initial project context')
+      .mockResolvedValueOnce('DYNAMIC: refreshed project context');
+    const sentMessages: Message[][] = [];
+    const mockChat = vi.fn().mockImplementation((messages: Message[]) => {
+      sentMessages.push(messages.map(message => ({ ...message })));
+      if (sentMessages.length === 1) {
+        return Promise.resolve({
+          content: '',
+          finishReason: 'tool_calls',
+          toolCalls: [{
+            id: 'write-1',
+            name: 'write_file',
+            arguments: { path: 'example.txt', content: 'updated' },
+          }],
+          usage: { totalTokens: 10, costFcfa: 0.1 },
+        });
+      }
+      return Promise.resolve({
+        content: 'Terminé.',
+        finishReason: 'stop',
+        usage: { totalTokens: 10, costFcfa: 0.1 },
+      });
+    });
+    vi.mocked(ImaraClient).prototype.chat = mockChat;
+    const executeSpy = vi.spyOn(ToolExecutor, 'execute')
+      .mockResolvedValue({ ok: true, value: 'Fichier écrit.' });
+
+    try {
+      const agent = new Agent();
+      await agent.run('Modifie le fichier.');
+
+      expect(sentMessages[0][0].content).toBe(sentMessages[1][0].content);
+      expect(sentMessages[0][1].content).toBe('DYNAMIC: initial project context');
+      expect(sentMessages[1][1].content).toBe('DYNAMIC: initial project context');
+      expect(sentMessages[1][sentMessages[1].length - 1]).toMatchObject({
+        role: 'user',
+        content: expect.stringContaining('DYNAMIC: refreshed project context'),
+      });
+    } finally {
+      executeSpy.mockRestore();
+    }
   });
 
   it('should throw an error when iterations exceed 120', async () => {

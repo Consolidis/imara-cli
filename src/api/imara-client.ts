@@ -89,19 +89,19 @@ export class ImaraClient {
   }
 
   async chat(messages: Message[], options: AgentOptions): Promise<AgentResponse> {
-    const cacheKey = computeContextHash(messages);
+    const modelId = this.mapModel(options.model);
+    const sanitizedMessages = sanitizeMessages(messages);
+    const payload = {
+      messages: sanitizedMessages,
+      model: modelId,
+      tools: TOOLS_DEFINITIONS,
+      maxTokens: options.maxTokens,
+      system: options.model === 'zuri' ? 'Tu es Imara Zuri, un expert en code.' : undefined,
+    };
+    const cacheKey = computeContextHash(payload);
     try {
       const data = await this.circuitBreaker.execute(async () => {
         return executeWithRetry(async () => {
-          const modelId = this.mapModel(options.model);
-          const sanitizedMessages = sanitizeMessages(messages);
-          const payload = {
-            messages: sanitizedMessages,
-            model: modelId,
-            tools: TOOLS_DEFINITIONS,
-            maxTokens: options.maxTokens,
-            system: options.model === 'zuri' ? 'Tu es Imara Zuri, un expert en code.' : undefined,
-          };
           if (getDebugMode()) {
             console.error(`\x1b[36m[IMARA_DEBUG] POST /v1/agent/chat\x1b[0m`);
             console.error(`\x1b[36m[IMARA_DEBUG] Payload: ${JSON.stringify(payload, null, 2)}\x1b[0m`);

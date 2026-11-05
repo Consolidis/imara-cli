@@ -22,6 +22,32 @@ describe('Client Resilience & Cache Fallback', () => {
     expect(computeContextHash(messages1)).toBe(computeContextHash(messages2));
   });
 
+  it('should include tool calls and request options in the response-cache key', () => {
+    const messages: Message[] = [
+      { role: 'assistant', content: '', tool_calls: [{
+        id: 'call-1',
+        type: 'function',
+        function: { name: 'read_file_range', arguments: '{"path":"a.ts","start_line":1}' },
+      }] },
+    ];
+    const request = { messages, model: 'flash', maxTokens: 100 };
+
+    expect(computeContextHash(request)).not.toBe(computeContextHash({
+      ...request,
+      maxTokens: 200,
+    }));
+    expect(computeContextHash(request)).not.toBe(computeContextHash({
+      ...request,
+      messages: [{
+        ...messages[0],
+        tool_calls: [{
+          ...messages[0].tool_calls![0],
+          function: { ...messages[0].tool_calls![0].function, arguments: '{"path":"a.ts","start_line":2}' },
+        }],
+      }],
+    }));
+  });
+
   it('should store and fallback to cache on network failures', async () => {
     const client = new ImaraClient('test-key');
     const messages: Message[] = [{ role: 'user', content: 'persistent query' }];
@@ -52,6 +78,26 @@ describe('Client Resilience & Cache Fallback', () => {
     
     // Clear persistence cache for the test
     (client as any).cache.clear();
+  });
+
+  it('should not reuse an offline response with different request options', async () => {
+    const client = new ImaraClient('test-key');
+    const messages: Message[] = [{ role: 'user', content: 'request option cache isolation' }];
+    const fetchMock = vi.spyOn(fetchModule, 'fetchWithTimeout')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ content: 'response', usage: { totalTokens: 1, costFcfa: 0 } }),
+      } as Response)
+      .mockRejectedValueOnce(new Error('Network connection failed'));
+
+    try {
+      await client.chat(messages, { model: 'flash', maxTokens: 100 });
+      await expect(client.chat(messages, { model: 'flash', maxTokens: 200 }))
+        .rejects.toThrow('Network connection failed');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      (client as any).cache.clear();
+    }
   });
 
   it('should parse raw embedded tool calls from content as a fallback', async () => {

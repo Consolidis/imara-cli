@@ -50,7 +50,7 @@ export class Agent {
     timestamp: number;
   }[] = [];
   private preloadedSystemPrompt: string | null = null;
-  /** Flag indiquant que le bloc DYNAMIC du system prompt doit etre rafraichi */
+  /** Indique qu'une mise a jour du contexte projet doit etre ajoutee a l'historique. */
   private dynamicContextDirty = false;
 
   constructor(options: AgentOptions = {}) {
@@ -156,6 +156,22 @@ export class Agent {
         throw new Error("Nombre maximum d'itérations (120) dépassé. Arrêt de sécurité.");
       }
 
+      // Ajouter les changements au bout de l'historique preserve le prefixe stable
+      // du prompt, ce qui permet aux fournisseurs compatibles de reutiliser leur cache.
+      if (this.dynamicContextDirty && this.messages.length > 1 && this.messages[1].role === 'system') {
+        try {
+          const freshDynamic = await ContextBuilder.buildDynamicContext(this.options);
+          this.messages.push({
+            role: 'user',
+            content: `MISE À JOUR AUTOMATIQUE DU CONTEXTE DU PROJET (information, pas une nouvelle demande) :\n${freshDynamic}`,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          process.stderr.write(`\n  ⚠ Impossible d'actualiser le contexte du projet : ${message}\n`);
+        }
+        this.dynamicContextDirty = false;
+      }
+
       // CHECK FENETRE DE CONTEXTE
       const check = this.contextWindow.check(this.messages);
       if (check.action === 'warn') {
@@ -213,17 +229,6 @@ export class Agent {
       }
       uiEvents.setPhase('thinking');
       try {
-        // Dynamic Context Refresh: regenerer UNIQUEMENT le bloc DYNAMIC (messages[1])
-        // apres un outil avec side-effect qui modifie git status, projet ou track.
-        if (this.dynamicContextDirty && this.messages.length > 1 && this.messages[1].role === 'system') {
-          try {
-            const freshDynamic = await ContextBuilder.buildDynamicContext(this.options);
-            this.messages[1].content = freshDynamic;
-          } catch (_err) {
-            // Fallback silently
-          }
-          this.dynamicContextDirty = false;
-        }
         startThinkingSpinner();
         const effectiveModel = this.resolveEffectiveModel();
         const chatOptions = { ...this.options, model: effectiveModel };
